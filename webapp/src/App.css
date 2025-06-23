@@ -5,36 +5,75 @@
   box-sizing: border-box;
 }
 
-html, body {
-  height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--tg-bg-color, #00102E);
-  color: var(--tg-text-color, #ffffff);
-  overflow-x: hidden;
-  user-select: none;
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.root {
-  height: 100vh;
-  width: 100vw;
+body {
+  margin: 0;
+  background: #121212;
+  color: #fff;
+  font-family: system-ui, -apple-system, sans-serif;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  gap: 1rem;
+  min-height: 100vh;
 }
 
-.header {
-  font-size: 2.2rem;
+.app-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  max-width: 600px;
+  width: 100%;
+}
+
+.title {
+  margin: 0.5rem 0 1rem;
+  font-size: 1.8rem;
   font-weight: bold;
-  color: #FFD700;
+  color: #E01313;
   text-align: center;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-  margin-bottom: 0.5rem;
+}
+
+.loading {
+  color: #FFD700;
+  font-size: 1.1rem;
+  margin-top: 50px;
+}
+
+.game-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 15px;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.player-info,
+.turn-info,
+.status-info {
+  font-size: 0.9rem;
+  color: #ccc;
+}
+
+.player-info strong,
+.turn-info strong,
+.status-info strong {
+  color: #FFD700;
+}
+
+.instructions {
+  margin-top: 20px;
+  text-align: center;
+  color: #ccc;
+  font-size: 0.9rem;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  max-width: 300px;
 }
 
 .status-bar {
@@ -116,16 +155,6 @@ html, body {
     inset 0 2px 4px rgba(255, 255, 255, 0.15);
 }
 
-.game-info {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  text-align: center;
-  width: 100%;
-  max-width: 400px;
-}
-
 .player-color {
   font-size: 1.1rem;
   font-weight: 600;
@@ -195,16 +224,19 @@ html, body {
   }
 }
 
-/* Mobile Optimizations */
+/* Mobile optimizations */
 @media (max-width: 480px) {
-  .root {
-    padding: 0.5rem;
-    gap: 0.5rem;
+  .app-container {
+    padding: 10px;
   }
   
-  .header {
-    font-size: 1.8rem;
-    margin-bottom: 0.25rem;
+  .title {
+    font-size: 1.5rem;
+  }
+  
+  .game-info {
+    font-size: 0.8rem;
+    padding: 12px;
   }
   
   .board-container {
@@ -229,14 +261,8 @@ html, body {
 }
 
 @media (max-height: 600px) {
-  .root {
-    gap: 0.25rem;
-    padding: 0.25rem;
-  }
-  
-  .header {
-    font-size: 1.5rem;
-    margin-bottom: 0;
+  .game-info {
+    padding: 12px;
   }
   
   .board-container {
@@ -251,7 +277,7 @@ html, body {
     border-color: #FF0000;
   }
   
-  .header {
+  .title {
     color: #FFFF00;
     text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
   }

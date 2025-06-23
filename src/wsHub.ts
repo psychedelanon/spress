@@ -148,27 +148,29 @@ export function initWS(server: import('http').Server) {
       const gameSession = games.get(id);
       if (!gameSession) return;
       
-      // Parse move - handle both algebraic notation and from-to format
+      // Parse move - normalize UCI format (e2e4, e7e8q, etc.)
       let move;
       try {
-        if (msg.move.length === 4 && /^[a-h][1-8][a-h][1-8]$/.test(msg.move)) {
-          // From-to format like "e2e4"
-          move = game.move({
-            from: msg.move.slice(0, 2),
-            to: msg.move.slice(2, 4),
-            promotion: 'q' // Auto-promote to queen
-          });
-        } else {
-          // Try algebraic notation like "e4" or "Nf3"
-          move = game.move(msg.move);
-        }
+        const { move: rawMove } = msg;
+        
+        /** 1️⃣ Normalize move format ******************************************/
+        // Allow "e2e4", "e2->e4", "e2 e4", etc.
+        const trimmed = rawMove.replace(/[^a-h1-8qrbn]/gi, '');
+        // Allow optional promotion letter at the very end
+        const uciMatch = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/i.exec(trimmed);
+        if (!uciMatch) throw new Error('Invalid move format: ' + rawMove);
+        const [, uFrom, uTo, promo] = uciMatch;
+
+        /** 2️⃣ Try move in chess.js ****************************************/
+        move = game.move({
+          from: uFrom,
+          to: uTo,
+          promotion: (promo as any) || 'q',
+        });
+        
+        if (!move) throw new Error('Illegal move');
       } catch (error) {
-        console.error('Invalid move format:', msg.move);
-        return;
-      }
-      
-      if (!move) {
-        console.log('Illegal move attempted:', msg.move);
+        console.error('Move parsing error:', error);
         return;
       }
 
@@ -220,16 +222,20 @@ export function initWS(server: import('http').Server) {
             const aiMove = await bestMove(game.fen());
             console.log(`AI attempting move: ${aiMove}`);
             
-            // Parse AI move (should be in from-to format)
+            // Parse AI move (should be in UCI format)
+            const aiTrimmed = aiMove.replace(/[^a-h1-8qrbn]/gi, '');
+            const aiUciMatch = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/i.exec(aiTrimmed);
+            
             let aiMoveResult;
-            if (aiMove.length === 4 && /^[a-h][1-8][a-h][1-8]$/.test(aiMove)) {
+            if (aiUciMatch) {
+              const [, aiFrom, aiTo, aiPromo] = aiUciMatch;
               aiMoveResult = game.move({
-                from: aiMove.slice(0, 2),
-                to: aiMove.slice(2, 4),
-                promotion: 'q'
+                from: aiFrom,
+                to: aiTo,
+                promotion: (aiPromo as any) || 'q'
               });
             } else {
-              // Try as algebraic notation
+              // Fallback: try as algebraic notation
               aiMoveResult = game.move(aiMove);
             }
             

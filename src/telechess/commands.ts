@@ -2,25 +2,13 @@ import { Context } from 'telegraf';
 import { InlineKeyboardMarkup } from 'telegraf/types';
 import { GameSession, Player } from './GameSession';
 import { ensureHttps } from '../utils/ensureHttps';
-import { insertGame } from '../store/db';
-
-// Store active games
-const activeGames = new Map<string, GameSession>();
+import { insertGame, games, registerUser, getUser } from '../store/db';
+import { GameSession as NewGameSession, PlayerInfo } from '../types';
 
 // Helper function to generate session ID
 function generateSessionId(player1Id: number, player2Id: number): string {
   const sortedIds = [player1Id, player2Id].sort();
   return `game_${sortedIds[0]}_${sortedIds[1]}_${Date.now()}`;
-}
-
-// Helper function to create player object
-function createPlayer(user: any, isWhite: boolean): Player {
-  return {
-    id: user.id,
-    username: user.username || user.first_name,
-    firstName: user.first_name,
-    isWhite
-  };
 }
 
 // Helper function to create inline keyboard with Mini App button
@@ -50,30 +38,53 @@ function createGameKeyboard(sessionId: string, playerColor: 'w' | 'b'): InlineKe
 // /solo command handler
 export async function handleSoloGame(ctx: Context) {
   const challenger = ctx.from;
-  if (!challenger) {
-    ctx.reply('Error: Could not identify player');
+  const chatId = ctx.chat?.id;
+  
+  if (!challenger || !chatId) {
+    ctx.reply('Error: Could not identify player or chat');
     return;
   }
 
+  // Register user for DM capability
+  registerUser(challenger.id, chatId, challenger.username);
+
   const sessionId = `solo_${Date.now()}_${challenger.id}`;
   
-  // Create solo game session (will be handled differently in wsHub)
-  const whitePlayer = createPlayer(challenger, true);
-  const blackPlayer = createPlayer({ id: 0, username: 'AI', first_name: 'AI' }, false);
-  const game = new GameSession(sessionId, whitePlayer, blackPlayer);
-  game.mode = 'ai'; // Add mode property
+  // Create new game session with proper structure
+  const gameSession: NewGameSession = {
+    id: sessionId,
+    chatId,
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    mode: 'ai',
+    lastMoveAt: Date.now(),
+    pgn: '',
+    players: {
+      w: {
+        id: challenger.id,
+        username: challenger.username,
+        dmChatId: chatId,
+        color: 'w'
+      },
+      b: {
+        id: 0, // AI opponent
+        username: 'AI',
+        color: 'b'
+      }
+    }
+  };
   
-  activeGames.set(sessionId, game);
+  games.set(sessionId, gameSession);
 
   // Persist to database
   insertGame.run(
     sessionId,
-    game.getFen(),
-    game.getPgn(),
+    gameSession.fen,
+    gameSession.pgn || '',
     'w', // White always starts
     challenger.id,
     0, // AI opponent
-    'ai'
+    'ai',
+    chatId
   );
 
   const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
@@ -92,7 +103,9 @@ export async function handleSoloGame(ctx: Context) {
 // /new command handler
 export async function handleNewGame(ctx: Context) {
   const message = ctx.message;
-  if (!message || !('text' in message)) return;
+  const chatId = ctx.chat?.id;
+  
+  if (!message || !('text' in message) || !chatId) return;
 
   const text = message.text;
   const match = text.match(/^\/new\s+@?(\w+)/);
@@ -110,6 +123,9 @@ export async function handleNewGame(ctx: Context) {
     return;
   }
 
+  // Register challenger for DM capability
+  registerUser(challenger.id, chatId, challenger.username);
+
   // For demo purposes, we'll create a mock opponent
   // In a real implementation, you'd need to resolve the username to a user ID
   const mockOpponent = {
@@ -118,24 +134,44 @@ export async function handleNewGame(ctx: Context) {
     first_name: opponentUsername
   };
 
-  // Command sender is always White (plays first)
-  const whitePlayer = createPlayer(challenger, true);
-  const blackPlayer = createPlayer(mockOpponent, false);
-
   const sessionId = generateSessionId(challenger.id, mockOpponent.id);
-  const game = new GameSession(sessionId, whitePlayer, blackPlayer);
   
-  activeGames.set(sessionId, game);
+  // Create new game session with proper structure
+  const gameSession: NewGameSession = {
+    id: sessionId,
+    chatId,
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    mode: 'pvp',
+    lastMoveAt: Date.now(),
+    pgn: '',
+    players: {
+      w: {
+        id: challenger.id,
+        username: challenger.username,
+        dmChatId: chatId,
+        color: 'w'
+      },
+      b: {
+        id: mockOpponent.id,
+        username: mockOpponent.username,
+        color: 'b'
+        // dmChatId will be filled when opponent first talks to bot
+      }
+    }
+  };
+  
+  games.set(sessionId, gameSession);
 
   // Persist to database
   insertGame.run(
     sessionId,
-    game.getFen(),
-    game.getPgn(),
+    gameSession.fen,
+    gameSession.pgn || '',
     'w', // White always starts
     challenger.id,
     mockOpponent.id,
-    'human'
+    'pvp',
+    chatId
   );
 
   const colorInfo = 'You are White ⚪';
@@ -144,19 +180,17 @@ export async function handleNewGame(ctx: Context) {
 ${colorInfo}
 Opponent: @${opponentUsername}
 
-${game.getStatusMessage()}
+White to move
 
-${game.getSimpleBoardText()}
-
-Use the Mini App for the best experience, or send moves in algebraic notation (e.g., e4, Nf3, O-O).
+Use the Mini App for the best experience!
   `.trim();
 
-  ctx.reply(gameInfo, {
+  await ctx.reply(gameInfo, {
     reply_markup: createGameKeyboard(sessionId, 'w'),
     parse_mode: 'HTML'
   });
 
-  // Send separate launch buttons for each player
+  // Send launch buttons for each player
   const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
   const whiteUrl = `${base}/webapp/?session=${sessionId}&color=w`;
   const blackUrl = `${base}/webapp/?session=${sessionId}&color=b`;
@@ -184,6 +218,11 @@ export function handleMove(ctx: Context) {
   // Allow commands to pass through
   if (text.startsWith('/')) return;
   
+  // Register user for DM capability
+  if (ctx.chat) {
+    registerUser(ctx.from.id, ctx.chat.id, ctx.from.username);
+  }
+  
   // Block all other text and redirect to board
   return ctx.reply('♟️ Please open the SPRESS board and move pieces there ↗️');
 }
@@ -195,119 +234,94 @@ export function handleResign(ctx: Context) {
   const userId = ctx.from.id;
 
   // Find active game for this user
-  let userGame: GameSession | undefined;
-  for (const game of activeGames.values()) {
-    if (game.players.some(p => p.id === userId)) {
+  let userGame: NewGameSession | undefined;
+  for (const game of games.values()) {
+    if (game.players.w.id === userId || game.players.b.id === userId) {
       userGame = game;
       break;
     }
   }
 
   if (!userGame) {
-    ctx.reply('No active game found.');
+    ctx.reply('❌ You have no active game to resign from.');
     return;
   }
 
-  const result = userGame.resign(userId);
+  // Determine winner
+  const isWhite = userGame.players.w.id === userId;
+  const winner = isWhite ? 'Black' : 'White';
+  const playerColor = isWhite ? 'White' : 'Black';
+
+  // Mark game as finished
+  userGame.winner = winner;
   
-  if (!result.ok) {
-    ctx.reply(`❌ ${result.error}`);
-    return;
-  }
+  // Remove from active games
+  games.delete(userGame.id);
 
-  // Game state will be handled by WebSocket hub
-
-  ctx.reply(`🏳️ ${ctx.from.first_name} resigned.\n\n${userGame.getStatusMessage()}`);
-
-  // Clean up game
-  setTimeout(() => {
-    activeGames.delete(userGame!.sessionId);
-  }, 10000);
+  ctx.reply(`🏳️ You resigned as ${playerColor}. ${winner} wins!`);
 }
 
-// Callback query handlers
+// Handle callback queries (inline button presses)
 export function handleCallbackQuery(ctx: Context) {
   const callbackQuery = ctx.callbackQuery;
-  if (!callbackQuery || !('data' in callbackQuery) || !ctx.from) return;
+  if (!callbackQuery || !('data' in callbackQuery)) return;
 
   const data = callbackQuery.data;
-  const userId = ctx.from.id;
-
+  
   if (data.startsWith('show_board_')) {
     const sessionId = data.replace('show_board_', '');
-    const game = activeGames.get(sessionId);
+    const game = games.get(sessionId);
     
     if (!game) {
       ctx.answerCbQuery('Game not found');
       return;
     }
-
+    
+    // Simple ASCII board representation
+    const boardText = `
+Current Position:
+\`\`\`
+♜ ♞ ♝ ♛ ♚ ♝ ♞ ♜
+♟ ♟ ♟ ♟ ♟ ♟ ♟ ♟
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+♙ ♙ ♙ ♙ ♙ ♙ ♙ ♙
+♖ ♘ ♗ ♕ ♔ ♗ ♘ ♖
+\`\`\`
+    `;
+    
     ctx.answerCbQuery();
-    ctx.reply(`Current position:\n\n${game.getSimpleBoardText()}\n\n${game.getStatusMessage()}`);
-  }
-  else if (data.startsWith('show_moves_')) {
+    ctx.reply(boardText, { parse_mode: 'Markdown' });
+    
+  } else if (data.startsWith('show_moves_')) {
     const sessionId = data.replace('show_moves_', '');
-    const game = activeGames.get(sessionId);
+    const game = games.get(sessionId);
     
     if (!game) {
       ctx.answerCbQuery('Game not found');
       return;
     }
-
+    
+    const moves = game.pgn || 'No moves yet';
     ctx.answerCbQuery();
-    ctx.reply(`Move history:\n\n${game.getMoveHistory()}`);
-  }
-  else if (data.startsWith('resign_')) {
-    const sessionId = data.replace('resign_', '');
-    const game = activeGames.get(sessionId);
+    ctx.reply(`📜 Game moves:\n\`${moves}\``, { parse_mode: 'Markdown' });
     
-    if (!game) {
-      ctx.answerCbQuery('Game not found');
-      return;
-    }
-
-    if (!game.players.some(p => p.id === userId)) {
-      ctx.answerCbQuery('You are not a player in this game');
-      return;
-    }
-
-    const result = game.resign(userId);
+  } else if (data.startsWith('resign_')) {
+    handleResign(ctx);
+    ctx.answerCbQuery();
     
-    if (!result.ok) {
-      ctx.answerCbQuery(result.error || 'Could not resign');
-      return;
-    }
-
-    // Game state will be handled by WebSocket hub
-
-    ctx.answerCbQuery('Game resigned');
-    ctx.editMessageText(`🏳️ ${ctx.from.first_name} resigned.\n\n${game.getStatusMessage()}`);
-
-    // Clean up game
-    setTimeout(() => {
-      activeGames.delete(game.sessionId);
-    }, 10000);
-  }
-  else if (data.startsWith('help_')) {
+  } else if (data.startsWith('help_')) {
     ctx.answerCbQuery();
     ctx.reply(
-      `🏁 How to Play Chess:\n\n` +
-      `📝 Send moves in algebraic notation:\n` +
-      `• e4, e5 (pawn moves)\n` +
-      `• Nf3, Nc6 (knight moves)\n` +
-      `• Bb5, Bc5 (bishop moves)\n` +
-      `• Qd1, Qd8 (queen moves)\n` +
-      `• Kh1, Kg8 (king moves)\n` +
-      `• O-O (kingside castle)\n` +
-      `• O-O-O (queenside castle)\n\n` +
-      `🎯 Examples:\n` +
-      `• "e4" - Move pawn to e4\n` +
-      `• "Nf3" - Move knight to f3\n` +
-      `• "Qxf7+" - Queen captures on f7 with check\n\n` +
-      `⚡ The board updates automatically after each move!`
+      'ℹ️ How to Play SPRESS Chess:\n\n' +
+      '1. Tap "♟️ Launch SPRESS Board" to open the interactive board\n' +
+      '2. Tap a piece to select it, then tap where you want to move\n' +
+      '3. Or drag pieces directly to move them\n' +
+      '4. The game updates in real-time for both players\n' +
+      '5. Use /resign to give up the game\n\n' +
+      'Good luck! ♟️'
     );
   }
-}
-
-// Export active games for external access
-export { activeGames }; 
+} 

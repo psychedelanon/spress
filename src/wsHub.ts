@@ -1,23 +1,83 @@
 import WebSocket from 'ws';
 import { Chess } from 'chess.js';
 import bestMove from './engine/stockfish';
-import { getGame, updateGame, deleteGame, updateLastDm } from './store/db';
+import { getGame, updateGame, deleteGame, updateLastDm, games } from './store/db';
 import { ensureHttps } from './utils/ensureHttps';
+import { GameSession } from './types';
 
-interface GameSession {
-  game: Chess;
+interface SessionClients {
   clients: Set<WebSocket>;
-  colors: Record<string, 'w' | 'b'>;
-  mode?: 'ai' | 'human';
-  lastDm: number;
+  game: Chess;
 }
 
-const sessions = new Map<string, GameSession>();
+const sessions = new Map<string, SessionClients>();
 
-// Import bot instance for sending DMs
+// Import bot instance for sending notifications
 let botInstance: any = null;
 export function setBotInstance(bot: any) {
   botInstance = bot;
+}
+
+/**
+ * Robust turn notification that prevents 400 Bad Request errors
+ */
+export async function sendTurnNotification(gameSession: GameSession) {
+  if (!botInstance) {
+    console.warn('Bot instance not available for notifications');
+    return;
+  }
+
+  const turnColor: 'w' | 'b' = gameSession.fen.split(' ')[1] as 'w' | 'b';
+  const player = gameSession.players[turnColor];
+  const otherPlayer = gameSession.players[turnColor === 'w' ? 'b' : 'w'];
+
+  // Build web-app URL
+  const params = new URLSearchParams({
+    session: gameSession.id,
+    color: turnColor,
+  });
+  const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
+  const boardUrl = `${base}/webapp/?${params.toString()}`;
+
+  // Message text
+  const mention = player.username ? `@${player.username}` : 'Your';
+  const text = `♟️ ${mention} move`;
+
+  // Inline "Open board" button
+  const markup = {
+    inline_keyboard: [
+      [{ text: 'Open board', web_app: { url: boardUrl } }]
+    ]
+  };
+
+  console.log(`Sending turn notification: ${text} for game ${gameSession.id}`);
+
+  // 1) Always notify the *origin chat* where game was created
+  try {
+    await botInstance.telegram.sendMessage(gameSession.chatId, text, { 
+      reply_markup: markup 
+    });
+    console.log(`✅ Notified origin chat ${gameSession.chatId}`);
+  } catch (err: any) {
+    console.error('Failed to notify origin chat:', err?.description || err);
+  }
+
+  // 2) Optional personal DM (only if we stored dmChatId and it's different from origin)
+  if (player.dmChatId && player.dmChatId !== gameSession.chatId) {
+    try {
+      await botInstance.telegram.sendMessage(player.dmChatId, text, { 
+        reply_markup: markup 
+      });
+      console.log(`✅ Sent DM to user ${player.id}`);
+    } catch (err: any) {
+      // Ignore 400 here – user might have blocked bot, etc.
+      if (err?.description?.includes('chat not found')) {
+        console.warn(`DM to user ${player.id} failed – they never started the bot`);
+      } else {
+        console.error('Failed to DM user:', err?.description || err);
+      }
+    }
+  }
 }
 
 export function initWS(server: import('http').Server) {
@@ -28,50 +88,65 @@ export function initWS(server: import('http').Server) {
     const id = searchParams.get('session')!;
     const color = searchParams.get('color') as 'w' | 'b';
 
-    let session = sessions.get(id);
-    if (!session) {
-      // Try to load from database
-      const row = getGame.get(id) as any;
-      if (!row) {
+    let sessionClients = sessions.get(id);
+    if (!sessionClients) {
+      // Try to load game from database/memory
+      const gameSession = games.get(id);
+      if (!gameSession) {
         // If no session exists, create a demo session for testing
         console.log(`Session ${id} not found, creating demo session`);
-        session = {
-          game: new Chess(),
-          clients: new Set(),
-          colors: { 'demo_white': 'w', 'demo_black': 'b' },
-          mode: 'human',
-          lastDm: 0
+        const demoGame: GameSession = {
+          id,
+          chatId: 0, // Demo chat ID
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          mode: 'pvp',
+          lastMoveAt: Date.now(),
+          pgn: '',
+          players: {
+            w: { id: 1, username: 'demo_white', color: 'w' },
+            b: { id: 2, username: 'demo_black', color: 'b' }
+          }
         };
-        sessions.set(id, session);
+        games.set(id, demoGame);
+        
+        sessionClients = {
+          clients: new Set(),
+          game: new Chess()
+        };
+        sessions.set(id, sessionClients);
         console.log(`Created demo session ${id}`);
       } else {
-        session = {
-          game: new Chess(row.fen),
+        sessionClients = {
           clients: new Set(),
-          colors: { [row.white_id]: 'w', [row.black_id]: 'b' },
-          mode: row.mode || 'human',
-          lastDm: row.last_dm || 0
+          game: new Chess(gameSession.fen)
         };
-        sessions.set(id, session);
+        sessions.set(id, sessionClients);
+        console.log(`Loaded existing session ${id}`);
       }
     }
 
-    session.clients.add(ws);
+    sessionClients.clients.add(ws);
     console.log(`Player connected to session ${id} as ${color}`);
 
     // Send initial game state
-    ws.send(JSON.stringify({
-      type: 'update',
-      fen: session.game.fen(),
-      turn: session.game.turn(),
-      winner: session.game.isGameOver() ? (session.game.turn() === 'w' ? 'black' : 'white') : null
-    }));
+    const gameSession = games.get(id);
+    if (gameSession) {
+      ws.send(JSON.stringify({
+        type: 'update',
+        fen: gameSession.fen,
+        turn: sessionClients.game.turn(),
+        winner: sessionClients.game.isGameOver() ? 
+          (sessionClients.game.turn() === 'w' ? 'black' : 'white') : null
+      }));
+    }
 
     ws.on('message', async raw => {
       const msg = JSON.parse(raw.toString());
       if (msg.type !== 'move') return;
 
-      const { game } = session!;
+      const { game } = sessionClients!;
+      const gameSession = games.get(id);
+      if (!gameSession) return;
       
       // Parse move - handle both algebraic notation and from-to format
       let move;
@@ -97,7 +172,12 @@ export function initWS(server: import('http').Server) {
         return;
       }
 
-      console.log(`Move made: ${move.san} (${move.from}->${move.to})`);
+      console.log(`Move made in ${id}: ${move.san} (${move.from}->${move.to})`);
+
+      // Update game session
+      gameSession.fen = game.fen();
+      gameSession.pgn = game.pgn();
+      gameSession.lastMoveAt = Date.now();
 
       // Update database with new position
       updateGame.run(game.fen(), game.pgn(), game.turn(), Date.now(), id);
@@ -111,7 +191,7 @@ export function initWS(server: import('http').Server) {
       };
 
       // Broadcast to all clients in this session
-      session!.clients.forEach(client => {
+      sessionClients!.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify(payload));
         }
@@ -120,16 +200,20 @@ export function initWS(server: import('http').Server) {
       // Check if game is over - cleanup if so
       if (game.isGameOver()) {
         console.log(`Game ${id} ended: ${game.isCheckmate() ? 'Checkmate' : game.isDraw() ? 'Draw' : 'Game over'}`);
+        gameSession.winner = game.turn() === 'w' ? 'black' : 'white';
         deleteGame.run(id);
-        setTimeout(() => sessions.delete(id), 5000); // Small delay for final messages
+        setTimeout(() => {
+          sessions.delete(id);
+          games.delete(id);
+        }, 5000);
         return;
       }
 
-      // Send turn notification to opponent if they're offline
-      await sendTurnNotification(session!, id);
+      // Send turn notification using the robust function
+      await sendTurnNotification(gameSession);
 
       // If AI mode and game not over, make AI move
-      if (session!.mode === 'ai' && !game.isGameOver() && game.turn() === 'b') {
+      if (gameSession.mode === 'ai' && !game.isGameOver() && game.turn() === 'b') {
         console.log('AI turn - calculating move...');
         setTimeout(async () => {
           try {
@@ -151,6 +235,12 @@ export function initWS(server: import('http').Server) {
             
             if (aiMoveResult) {
               console.log(`AI move successful: ${aiMoveResult.san}`);
+              
+              // Update game session
+              gameSession.fen = game.fen();
+              gameSession.pgn = game.pgn();
+              gameSession.lastMoveAt = Date.now();
+              
               // Update database with AI move
               updateGame.run(game.fen(), game.pgn(), game.turn(), Date.now(), id);
               
@@ -162,7 +252,7 @@ export function initWS(server: import('http').Server) {
                 winner: game.isGameOver() ? (game.turn() === 'w' ? 'black' : 'white') : null
               };
               
-              session!.clients.forEach(client => {
+              sessionClients!.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
                   client.send(JSON.stringify(aiPayload));
                 }
@@ -171,8 +261,15 @@ export function initWS(server: import('http').Server) {
               // Check if AI move ended the game
               if (game.isGameOver()) {
                 console.log(`AI ended game: ${game.isCheckmate() ? 'Checkmate' : 'Draw'}`);
+                gameSession.winner = game.turn() === 'w' ? 'black' : 'white';
                 deleteGame.run(id);
-                setTimeout(() => sessions.delete(id), 5000);
+                setTimeout(() => {
+                  sessions.delete(id);
+                  games.delete(id);
+                }, 5000);
+              } else {
+                // Send notification for human player's turn
+                await sendTurnNotification(gameSession);
               }
             } else {
               console.error('AI move failed:', aiMove);
@@ -180,16 +277,16 @@ export function initWS(server: import('http').Server) {
           } catch (error) {
             console.error('AI move error:', error);
           }
-        }, 800); // Slight delay for better UX
+        }, 800);
       }
     });
 
     ws.on('close', () => {
-      session?.clients.delete(ws);
-      if (session?.clients.size === 0) {
+      sessionClients?.clients.delete(ws);
+      if (sessionClients?.clients.size === 0) {
         // Clean up empty sessions after a delay
         setTimeout(() => {
-          if (session?.clients.size === 0) {
+          if (sessionClients?.clients.size === 0) {
             sessions.delete(id);
             console.log(`Cleaned up empty session ${id}`);
           }
@@ -199,43 +296,4 @@ export function initWS(server: import('http').Server) {
   });
 
   return wss;
-}
-
-// Send turn notification to offline opponent
-async function sendTurnNotification(session: GameSession, sessionId: string) {
-  if (!botInstance) return;
-
-  const { game, colors, lastDm, clients } = session;
-  const currentTurn = game.turn();
-  
-  // Find opponent's Telegram ID
-  const opponentId = Object.entries(colors)
-    .find(([tgId, color]) => color === currentTurn)?.[0];
-  
-  if (!opponentId) return;
-
-  // Debounce: only send if 30 seconds have passed and opponent is offline
-  const debounceMs = 30_000;
-  const isOpponentOffline = clients.size <= 1;
-  
-  if (Date.now() - lastDm > debounceMs && isOpponentOffline) {
-    try {
-      const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
-      const url = `${base}/webapp/?session=${sessionId}&color=${currentTurn}`;
-      
-      await botInstance.telegram.sendMessage(opponentId, '♟️ Your move', {
-        reply_markup: {
-          inline_keyboard: [[{
-            text: 'Open board',
-            web_app: { url }
-          }]]
-        }
-      });
-      
-      session.lastDm = Date.now();
-      updateLastDm.run(session.lastDm, sessionId);
-    } catch (error) {
-      console.error('Failed to send turn notification:', error);
-    }
-  }
 } 

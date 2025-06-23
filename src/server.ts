@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import http from 'http';
 import path from 'node:path';
 import { initWS, setBotInstance } from './wsHub';
+import { registerUser } from './store/db';
 import './store/db'; // Initialize database
 
 dotenv.config();
@@ -95,13 +96,19 @@ import { handleNewGame, handleSoloGame, handleMove, handleResign, handleCallback
 // Set up bot commands
 if (bot) {
   bot.start((ctx) => {
-    ctx.reply('Welcome to SPRESS Chess! ♟️\nSend /new @opponent to start a game.');
+    // Register user for DM capability
+    if (ctx.from && ctx.chat) {
+      registerUser(ctx.from.id, ctx.chat.id, ctx.from.username);
+      console.log(`User ${ctx.from.id} (${ctx.from.username || 'unnamed'}) registered for DMs`);
+    }
+    ctx.reply('Welcome to SPRESS Chess! ♟️\nSend /new @opponent to start a game or /solo to play against AI.');
   });
 
   bot.help((ctx) => {
     ctx.reply(
       'SPRESS Chess Commands:\n' +
       '/new @opponent - Start a new game\n' +
+      '/solo - Play vs AI\n' +
       '/resign - Resign current game\n' +
       'Use the interactive board to make moves\n' +
       'Click "♟️ Launch SPRESS Board" to play'
@@ -110,10 +117,18 @@ if (bot) {
 
   // Register command handlers
   bot.command('new', handleNewGame);
-bot.command('solo', handleSoloGame);
-bot.command('resign', handleResign);
+  bot.command('solo', handleSoloGame);
+  bot.command('resign', handleResign);
   bot.on('callback_query', handleCallbackQuery);
   bot.on('text', handleMove);
+
+  // Register users on any interaction
+  bot.use(async (ctx, next) => {
+    if (ctx.from && ctx.chat) {
+      registerUser(ctx.from.id, ctx.chat.id, ctx.from.username);
+    }
+    return next();
+  });
 
   // Error handling
   bot.catch((err, ctx) => {

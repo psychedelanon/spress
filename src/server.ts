@@ -14,11 +14,14 @@ const port = process.env.PORT || 3000;
 
 // Initialize Telegram bot
 console.log('🔧 Initializing bot...');
+let bot: Telegraf | null = null;
 if (!process.env.TELE_TOKEN) {
-  throw new Error('TELE_TOKEN is required');
+  console.warn('⚠️ TELE_TOKEN not set - bot will not work until configured');
+  console.log('🔧 Server starting without bot functionality...');
+} else {
+  bot = new Telegraf(process.env.TELE_TOKEN);
+  console.log('✅ Bot instance created');
 }
-const bot = new Telegraf(process.env.TELE_TOKEN);
-console.log('✅ Bot instance created');
 
 // WebSocket server for real-time board updates
 const wss = new WebSocketServer({ server });
@@ -120,7 +123,9 @@ export function broadcastToSession(sessionId: string, data: { fen: string; san?:
 }
 
 // Telegram webhook endpoint
-app.use('/bot', bot.webhookCallback('/bot'));
+if (bot) {
+  app.use('/bot', bot.webhookCallback('/bot'));
+}
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -131,38 +136,40 @@ app.get('/health', (req, res) => {
 import { handleNewGame, handleMove, handleResign, handleCallbackQuery } from './telechess/commands';
 
 // Set up bot commands
-bot.start((ctx) => {
-  ctx.reply('Welcome to TeleChess! ♟️\nSend /new @opponent to start a game.');
-});
+if (bot) {
+  bot.start((ctx) => {
+    ctx.reply('Welcome to TeleChess! ♟️\nSend /new @opponent to start a game.');
+  });
 
-bot.help((ctx) => {
-  ctx.reply(
-    'TeleChess Commands:\n' +
-    '/new @opponent - Start a new game\n' +
-    '/resign - Resign current game\n' +
-    'Send moves in algebraic notation (e.g., e4, Nf3, O-O)\n' +
-    'Click "Launch Mini App" for interactive board'
-  );
-});
+  bot.help((ctx) => {
+    ctx.reply(
+      'TeleChess Commands:\n' +
+      '/new @opponent - Start a new game\n' +
+      '/resign - Resign current game\n' +
+      'Send moves in algebraic notation (e.g., e4, Nf3, O-O)\n' +
+      'Click "Launch Mini App" for interactive board'
+    );
+  });
 
-// Register command handlers
-bot.command('new', handleNewGame);
-bot.command('resign', handleResign);
-bot.on('callback_query', handleCallbackQuery);
-bot.on('text', handleMove);
+  // Register command handlers
+  bot.command('new', handleNewGame);
+  bot.command('resign', handleResign);
+  bot.on('callback_query', handleCallbackQuery);
+  bot.on('text', handleMove);
 
-// Error handling
-bot.catch((err, ctx) => {
-  console.error('Bot error:', err);
-  ctx.reply('Something went wrong. Please try again.');
-});
+  // Error handling
+  bot.catch((err, ctx) => {
+    console.error('Bot error:', err);
+    ctx.reply('Something went wrong. Please try again.');
+  });
+}
 
 // Start server
 server.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
   
   // For development, always use polling mode (simpler to test)
-  if (process.env.NODE_ENV === 'production' && process.env.PUBLIC_URL) {
+  if (bot && process.env.NODE_ENV === 'production' && process.env.PUBLIC_URL) {
     const webhookUrl = `${process.env.PUBLIC_URL}/bot`;
     // Create a valid secret token (only alphanumeric characters allowed)
     const secretToken = process.env.TELE_TOKEN!.replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
@@ -173,20 +180,22 @@ server.listen(port, () => {
     })
       .then(() => console.log(`📡 Webhook set to: ${webhookUrl}`))
       .catch(err => console.error('Failed to set webhook:', err));
-  } else {
+  } else if (bot) {
     console.log('🔄 Using polling mode for development');
     console.log('🔑 Bot token:', process.env.TELE_TOKEN ? 'Present' : 'Missing');
     // For local development, use polling (easier to debug)
     bot.launch()
       .then(() => console.log('🤖 Bot launched in polling mode'))
       .catch(err => console.error('❌ Failed to launch bot:', err));
+  } else {
+    console.log('🚫 Bot not initialized - skipping webhook/polling setup');
   }
 });
 
 // Graceful shutdown
 process.once('SIGINT', () => {
   console.log('Received SIGINT, shutting down gracefully');
-  bot.stop('SIGINT');
+  if (bot) bot.stop('SIGINT');
   server.close(() => {
     process.exit(0);
   });
@@ -194,7 +203,7 @@ process.once('SIGINT', () => {
 
 process.once('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully');
-  bot.stop('SIGTERM');
+  if (bot) bot.stop('SIGTERM');
   server.close(() => {
     process.exit(0);
   });

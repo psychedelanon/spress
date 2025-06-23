@@ -2,6 +2,7 @@ import { Context } from 'telegraf';
 import { InlineKeyboardMarkup } from 'telegraf/types';
 import { GameSession, Player } from './GameSession';
 import { broadcastToSession } from '../server';
+import { ensureHttps } from '../utils/ensureHttps';
 
 // Store active games
 const activeGames = new Map<string, GameSession>();
@@ -24,7 +25,8 @@ function createPlayer(user: any, isWhite: boolean): Player {
 
 // Helper function to create inline keyboard with Mini App button
 function createGameKeyboard(sessionId: string): InlineKeyboardMarkup {
-  const url = `${process.env.PUBLIC_URL || 'http://localhost:3000'}/webapp/?session=${sessionId}`;
+  const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
+  const url = `${base}/webapp/?session=${sessionId}`;
   
   return {
     inline_keyboard: [
@@ -103,10 +105,11 @@ Use the Mini App for the best experience, or send moves in algebraic notation (e
   });
 
   // Add Mini App announcement
-  const url = `${process.env.PUBLIC_URL || 'http://localhost:3000'}/webapp/?session=${sessionId}`;
+  const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
+  const appUrl = `${base}/webapp/?session=${sessionId}`;
   await ctx.reply('Open interactive board ↗️', {
     reply_markup: {
-      inline_keyboard: [[{ text: '♟️ Launch Mini App', web_app: { url } }]]
+      inline_keyboard: [[{ text: '♟️ Launch Mini App', web_app: { url: appUrl } }]]
     }
   });
 }

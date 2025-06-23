@@ -159,8 +159,8 @@ if (bot) {
 
   // Error handling
   bot.catch((err, ctx) => {
-    console.error('Bot error:', err);
-    ctx.reply('Something went wrong. Please try again.');
+    console.error('Bot error', err);
+    ctx.reply('⚠️ Something went wrong. Please try again.').catch(() => {});
   });
 }
 

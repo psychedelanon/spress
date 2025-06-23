@@ -5,5 +5,16 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/webapp/',
-  build: { outDir: 'dist' }
+  build: { 
+    outDir: 'dist',
+    rollupOptions: {
+      external: [],
+      output: {
+        manualChunks: undefined
+      }
+    }
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom']
+  }
 })

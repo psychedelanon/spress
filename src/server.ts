@@ -35,15 +35,33 @@ if (bot) {
 app.use(express.json());
 app.use(express.static('public'));
 
-// Serve webapp static files in production
+// Serve webapp static files in production or fallback
 if (process.env.NODE_ENV === 'production') {
-  app.use(
-    '/webapp',
-    express.static(path.join(__dirname, '../webapp/dist'), { maxAge: '1h' })
-  );
-  app.get('/webapp/*', (_req, res) => {
-    res.sendFile(path.join(__dirname, '../webapp/dist/index.html'));
-  });
+  try {
+    app.use(
+      '/webapp',
+      express.static(path.join(__dirname, '../webapp/dist'), { maxAge: '1h' })
+    );
+    app.get('/webapp/*', (_req, res) => {
+      res.sendFile(path.join(__dirname, '../webapp/dist/index.html'));
+    });
+  } catch (error) {
+    console.warn('⚠️ Webapp dist not found, serving fallback');
+    app.get('/webapp/*', (_req, res) => {
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>SPRESS Chess</title></head>
+        <body style="background:#00102E;color:#FFD700;font-family:system-ui;text-align:center;padding:50px;">
+          <h1>🏗️ SPRESS Chess</h1>
+          <p>Mini App is being built...</p>
+          <p>Use bot commands for now: /new @username</p>
+          <p>Check back soon for the interactive board!</p>
+        </body>
+        </html>
+      `);
+    });
+  }
 } else {
   // In development, just serve a simple message
   app.get('/webapp/*', (_req, res) => {

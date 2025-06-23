@@ -24,17 +24,12 @@ function createPlayer(user: any, isWhite: boolean): Player {
 
 // Helper function to create inline keyboard with Mini App button
 function createGameKeyboard(sessionId: string): InlineKeyboardMarkup {
-  const miniAppUrl = process.env.PUBLIC_URL ? 
-    `${process.env.PUBLIC_URL}/webapp?sessionId=${sessionId}` : 
-    `https://your-app.com/webapp?sessionId=${sessionId}`;
-
+  const url = `${process.env.PUBLIC_URL || 'http://localhost:3000'}/webapp/?session=${sessionId}`;
+  
   return {
     inline_keyboard: [
       [
-        {
-          text: '♟️ Launch Mini App',
-          web_app: { url: miniAppUrl }
-        }
+        { text: '♟️ Launch Mini App', web_app: { url } }
       ],
       [
         { text: '📋 Show Board', callback_data: `show_board_${sessionId}` },
@@ -42,13 +37,16 @@ function createGameKeyboard(sessionId: string): InlineKeyboardMarkup {
       ],
       [
         { text: '🏳️ Resign', callback_data: `resign_${sessionId}` }
+      ],
+      [
+        { text: 'ℹ️ How to Play', callback_data: `help_${sessionId}` }
       ]
     ]
   };
 }
 
 // /new command handler
-export function handleNewGame(ctx: Context) {
+export async function handleNewGame(ctx: Context) {
   const message = ctx.message;
   if (!message || !('text' in message)) return;
 
@@ -102,6 +100,14 @@ Use the Mini App for the best experience, or send moves in algebraic notation (e
   ctx.reply(gameInfo, {
     reply_markup: createGameKeyboard(sessionId),
     parse_mode: 'HTML'
+  });
+
+  // Add Mini App announcement
+  const url = `${process.env.PUBLIC_URL || 'http://localhost:3000'}/webapp/?session=${sessionId}`;
+  await ctx.reply('Open interactive board ↗️', {
+    reply_markup: {
+      inline_keyboard: [[{ text: '♟️ Launch Mini App', web_app: { url } }]]
+    }
   });
 }
 
@@ -280,6 +286,25 @@ export function handleCallbackQuery(ctx: Context) {
     setTimeout(() => {
       activeGames.delete(game.sessionId);
     }, 10000);
+  }
+  else if (data.startsWith('help_')) {
+    ctx.answerCbQuery();
+    ctx.reply(
+      `🏁 How to Play Chess:\n\n` +
+      `📝 Send moves in algebraic notation:\n` +
+      `• e4, e5 (pawn moves)\n` +
+      `• Nf3, Nc6 (knight moves)\n` +
+      `• Bb5, Bc5 (bishop moves)\n` +
+      `• Qd1, Qd8 (queen moves)\n` +
+      `• Kh1, Kg8 (king moves)\n` +
+      `• O-O (kingside castle)\n` +
+      `• O-O-O (queenside castle)\n\n` +
+      `🎯 Examples:\n` +
+      `• "e4" - Move pawn to e4\n` +
+      `• "Nf3" - Move knight to f3\n` +
+      `• "Qxf7+" - Queen captures on f7 with check\n\n` +
+      `⚡ The board updates automatically after each move!`
+    );
   }
 }
 

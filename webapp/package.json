@@ -10,10 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@twa-dev/sdk": "^7.1.1",
     "chess.js": "^1.4.0",
     "react": "^19.1.0",
     "react-chessboard": "^4.7.3",
     "react-dom": "^19.1.0",
+    "reconnecting-websocket": "^4.4.0",
     "zustand": "^5.0.5"
   },
   "devDependencies": {

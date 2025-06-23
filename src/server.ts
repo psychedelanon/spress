@@ -4,6 +4,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
 import http from 'http';
 import { URL } from 'url';
+import path from 'node:path';
 
 dotenv.config();
 
@@ -12,7 +13,12 @@ const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 
 // Initialize Telegram bot
-const bot = new Telegraf(process.env.TELE_TOKEN!);
+console.log('🔧 Initializing bot...');
+if (!process.env.TELE_TOKEN) {
+  throw new Error('TELE_TOKEN is required');
+}
+const bot = new Telegraf(process.env.TELE_TOKEN);
+console.log('✅ Bot instance created');
 
 // WebSocket server for real-time board updates
 const wss = new WebSocketServer({ server });
@@ -23,6 +29,32 @@ const sessions = new Map<string, Set<WebSocket>>();
 // Middleware
 app.use(express.json());
 app.use(express.static('public'));
+
+// Serve webapp static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(
+    '/webapp',
+    express.static(path.join(__dirname, '../webapp/dist'), { maxAge: '1h' })
+  );
+  app.get('/webapp/*', (_req, res) => {
+    res.sendFile(path.join(__dirname, '../webapp/dist/index.html'));
+  });
+} else {
+  // Proxy webapp requests to Vite dev server in development
+  const { createProxyMiddleware } = require('http-proxy-middleware');
+  
+  app.use('/webapp', createProxyMiddleware({
+    target: 'http://localhost:5173',
+    changeOrigin: true,
+    pathRewrite: {
+      '^/webapp': '', // Remove /webapp prefix when forwarding to Vite
+    },
+    onError: (err: any, req: any, res: any) => {
+      console.error('Proxy error:', err);
+      res.status(500).send('Webapp proxy error - make sure Vite dev server is running on port 5173');
+    }
+  }));
+}
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
@@ -52,6 +84,23 @@ wss.on('connection', (ws, req) => {
       }
     }
     console.log(`Client disconnected from session: ${sessionId}`);
+  });
+
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      console.log(`Received message from session ${sessionId}:`, data);
+      
+      if (data.type === 'move' && data.move) {
+        // Broadcast the move to all clients in the session
+        broadcastToSession(sessionId, { 
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', // Placeholder - should be handled by game logic
+          san: data.move 
+        });
+      }
+    } catch (error) {
+      console.error('Error parsing WebSocket message:', error);
+    }
   });
 
   ws.on('error', (error) => {
@@ -114,16 +163,25 @@ bot.catch((err, ctx) => {
 server.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
   
-  // Set webhook if PUBLIC_URL is configured
-  if (process.env.PUBLIC_URL) {
+  // For development, always use polling mode (simpler to test)
+  if (process.env.NODE_ENV === 'production' && process.env.PUBLIC_URL) {
     const webhookUrl = `${process.env.PUBLIC_URL}/bot`;
-    bot.telegram.setWebhook(webhookUrl)
+    // Create a valid secret token (only alphanumeric characters allowed)
+    const secretToken = process.env.TELE_TOKEN!.replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
+    
+    bot.telegram.setWebhook(webhookUrl, { 
+      secret_token: secretToken,
+      allowed_updates: ['message', 'callback_query', 'inline_query']
+    })
       .then(() => console.log(`📡 Webhook set to: ${webhookUrl}`))
       .catch(err => console.error('Failed to set webhook:', err));
   } else {
-    console.log('⚠️  PUBLIC_URL not set - webhook not configured');
-    // For local development without webhook
-    bot.launch().then(() => console.log('🤖 Bot launched in polling mode'));
+    console.log('🔄 Using polling mode for development');
+    console.log('🔑 Bot token:', process.env.TELE_TOKEN ? 'Present' : 'Missing');
+    // For local development, use polling (easier to debug)
+    bot.launch()
+      .then(() => console.log('🤖 Bot launched in polling mode'))
+      .catch(err => console.error('❌ Failed to launch bot:', err));
   }
 });
 

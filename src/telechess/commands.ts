@@ -1,8 +1,8 @@
 import { Context } from 'telegraf';
 import { InlineKeyboardMarkup } from 'telegraf/types';
 import { GameSession, Player } from './GameSession';
-import { broadcastToSession } from '../server';
 import { ensureHttps } from '../utils/ensureHttps';
+import { insertGame } from '../store/db';
 
 // Store active games
 const activeGames = new Map<string, GameSession>();
@@ -24,14 +24,14 @@ function createPlayer(user: any, isWhite: boolean): Player {
 }
 
 // Helper function to create inline keyboard with Mini App button
-function createGameKeyboard(sessionId: string): InlineKeyboardMarkup {
+function createGameKeyboard(sessionId: string, playerColor: 'w' | 'b'): InlineKeyboardMarkup {
   const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
-  const url = `${base}/webapp/?session=${sessionId}`;
+  const url = `${base}/webapp/?session=${sessionId}&color=${playerColor}`;
   
   return {
     inline_keyboard: [
       [
-        { text: '♟️ Launch Mini App', web_app: { url } }
+        { text: '♟️ Launch SPRESS Board', web_app: { url } }
       ],
       [
         { text: '📋 Show Board', callback_data: `show_board_${sessionId}` },
@@ -45,6 +45,48 @@ function createGameKeyboard(sessionId: string): InlineKeyboardMarkup {
       ]
     ]
   };
+}
+
+// /solo command handler
+export async function handleSoloGame(ctx: Context) {
+  const challenger = ctx.from;
+  if (!challenger) {
+    ctx.reply('Error: Could not identify player');
+    return;
+  }
+
+  const sessionId = `solo_${Date.now()}_${challenger.id}`;
+  
+  // Create solo game session (will be handled differently in wsHub)
+  const whitePlayer = createPlayer(challenger, true);
+  const blackPlayer = createPlayer({ id: 0, username: 'AI', first_name: 'AI' }, false);
+  const game = new GameSession(sessionId, whitePlayer, blackPlayer);
+  game.mode = 'ai'; // Add mode property
+  
+  activeGames.set(sessionId, game);
+
+  // Persist to database
+  insertGame.run(
+    sessionId,
+    game.getFen(),
+    game.getPgn(),
+    'w', // White always starts
+    challenger.id,
+    0, // AI opponent
+    'ai'
+  );
+
+  const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
+  const url = `${base}/webapp/?session=${sessionId}&color=w`;
+  
+  await ctx.reply('🤖 Solo Mode - You vs AI', {
+    reply_markup: {
+      inline_keyboard: [[{
+        text: '🤖 Play Solo',
+        web_app: { url }
+      }]]
+    }
+  });
 }
 
 // /new command handler
@@ -76,17 +118,27 @@ export async function handleNewGame(ctx: Context) {
     first_name: opponentUsername
   };
 
-  // Randomly assign colors
-  const challengerIsWhite = Math.random() < 0.5;
-  const whitePlayer = createPlayer(challengerIsWhite ? challenger : mockOpponent, true);
-  const blackPlayer = createPlayer(challengerIsWhite ? mockOpponent : challenger, false);
+  // Command sender is always White (plays first)
+  const whitePlayer = createPlayer(challenger, true);
+  const blackPlayer = createPlayer(mockOpponent, false);
 
   const sessionId = generateSessionId(challenger.id, mockOpponent.id);
   const game = new GameSession(sessionId, whitePlayer, blackPlayer);
   
   activeGames.set(sessionId, game);
 
-  const colorInfo = challengerIsWhite ? 'You are White ⚪' : 'You are Black ⚫';
+  // Persist to database
+  insertGame.run(
+    sessionId,
+    game.getFen(),
+    game.getPgn(),
+    'w', // White always starts
+    challenger.id,
+    mockOpponent.id,
+    'human'
+  );
+
+  const colorInfo = 'You are White ⚪';
   const gameInfo = `
 🆕 New game started!
 ${colorInfo}
@@ -100,84 +152,40 @@ Use the Mini App for the best experience, or send moves in algebraic notation (e
   `.trim();
 
   ctx.reply(gameInfo, {
-    reply_markup: createGameKeyboard(sessionId),
+    reply_markup: createGameKeyboard(sessionId, 'w'),
     parse_mode: 'HTML'
   });
 
-  // Add Mini App announcement
+  // Send separate launch buttons for each player
   const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
-  const appUrl = `${base}/webapp/?session=${sessionId}`;
-  await ctx.reply('Open interactive board ↗️', {
+  const whiteUrl = `${base}/webapp/?session=${sessionId}&color=w`;
+  const blackUrl = `${base}/webapp/?session=${sessionId}&color=b`;
+
+  // Send to challenger (always White)
+  await ctx.reply('Launch SPRESS board', {
     reply_markup: {
-      inline_keyboard: [[{ text: '♟️ Launch Mini App', web_app: { url: appUrl } }]]
+      inline_keyboard: [[{ 
+        text: '♟️ Play (White)', 
+        web_app: { url: whiteUrl } 
+      }]]
     }
   });
+
+  // Note: In a real implementation, you'd send the other button to the actual opponent
 }
 
-// Handle move text
+// Handle text messages - block chess moves, redirect to board
 export function handleMove(ctx: Context) {
   const message = ctx.message;
   if (!message || !('text' in message) || !ctx.from) return;
 
   const text = message.text;
-  const userId = ctx.from.id;
-
-  // Find active game for this user
-  let userGame: GameSession | undefined;
-  for (const game of activeGames.values()) {
-    if (game.players.some(p => p.id === userId)) {
-      userGame = game;
-      break;
-    }
-  }
-
-  if (!userGame) {
-    // Check if it looks like a chess move
-    const movePattern = /^[a-h][1-8]|^[NBRQK][a-h]?[1-8]?x?[a-h][1-8]|^O-O(-O)?|^[a-h]x[a-h][1-8]/;
-    if (movePattern.test(text)) {
-      ctx.reply('No active game found. Start a new game with /new @opponent');
-    }
-    return;
-  }
-
-  // Try to apply the move
-  const result = userGame.applyMove(text, userId);
-
-  if (!result.ok) {
-    ctx.reply(`❌ ${result.error}`);
-    return;
-  }
-
-  // Broadcast update to WebSocket clients
-  if (result.fen) {
-    broadcastToSession(userGame.sessionId, {
-      fen: result.fen,
-      san: result.san,
-      pgn: result.pgn,
-      isCheckmate: result.isCheckmate
-    });
-  }
-
-  // Send updated game state to chat
-  const gameInfo = `
-📱 Move played: ${result.san}
-
-${userGame.getStatusMessage()}
-
-${userGame.getSimpleBoardText()}
-  `.trim();
-
-  ctx.reply(gameInfo, {
-    reply_markup: createGameKeyboard(userGame.sessionId),
-    parse_mode: 'HTML'
-  });
-
-  // If game is over, clean up
-  if (result.isGameOver) {
-    setTimeout(() => {
-      activeGames.delete(userGame!.sessionId);
-    }, 60000); // Keep for 1 minute after game ends
-  }
+  
+  // Allow commands to pass through
+  if (text.startsWith('/')) return;
+  
+  // Block all other text and redirect to board
+  return ctx.reply('♟️ Please open the SPRESS board and move pieces there ↗️');
 }
 
 // /resign command handler
@@ -207,12 +215,7 @@ export function handleResign(ctx: Context) {
     return;
   }
 
-  // Broadcast final state to WebSocket clients
-  broadcastToSession(userGame.sessionId, {
-    fen: result.fen!,
-    pgn: result.pgn,
-    isCheckmate: false
-  });
+  // Game state will be handled by WebSocket hub
 
   ctx.reply(`🏳️ ${ctx.from.first_name} resigned.\n\n${userGame.getStatusMessage()}`);
 
@@ -275,12 +278,7 @@ export function handleCallbackQuery(ctx: Context) {
       return;
     }
 
-    // Broadcast final state to WebSocket clients
-    broadcastToSession(game.sessionId, {
-      fen: result.fen!,
-      pgn: result.pgn,
-      isCheckmate: false
-    });
+    // Game state will be handled by WebSocket hub
 
     ctx.answerCbQuery('Game resigned');
     ctx.editMessageText(`🏳️ ${ctx.from.first_name} resigned.\n\n${game.getStatusMessage()}`);

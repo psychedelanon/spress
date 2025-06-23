@@ -1,10 +1,10 @@
 import express from 'express';
 import { Telegraf } from 'telegraf';
-import WebSocket, { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
 import http from 'http';
-import { URL } from 'url';
 import path from 'node:path';
+import { initWS, setBotInstance } from './wsHub';
+import './store/db'; // Initialize database
 
 dotenv.config();
 
@@ -23,11 +23,13 @@ if (!process.env.TELE_TOKEN) {
   console.log('✅ Bot instance created');
 }
 
-// WebSocket server for real-time board updates
-const wss = new WebSocketServer({ server });
+// Initialize WebSocket server for real-time board updates
+initWS(server);
 
-// Store WebSocket clients by session ID
-const sessions = new Map<string, Set<WebSocket>>();
+// Connect bot instance to WebSocket hub for turn notifications
+if (bot) {
+  setBotInstance(bot);
+}
 
 // Middleware
 app.use(express.json());
@@ -57,70 +59,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// WebSocket connection handler
-wss.on('connection', (ws, req) => {
-  const url = new URL(req.url!, `http://${req.headers.host}`);
-  const sessionId = url.searchParams.get('sessionId');
-  
-  if (!sessionId) {
-    ws.close(1008, 'Session ID required');
-    return;
-  }
-
-  // Add client to session
-  if (!sessions.has(sessionId)) {
-    sessions.set(sessionId, new Set());
-  }
-  sessions.get(sessionId)!.add(ws);
-
-  console.log(`Client connected to session: ${sessionId}`);
-
-  ws.on('close', () => {
-    // Remove client from session
-    const sessionClients = sessions.get(sessionId);
-    if (sessionClients) {
-      sessionClients.delete(ws);
-      if (sessionClients.size === 0) {
-        sessions.delete(sessionId);
-      }
-    }
-    console.log(`Client disconnected from session: ${sessionId}`);
-  });
-
-  ws.on('message', (message) => {
-    try {
-      const data = JSON.parse(message.toString());
-      console.log(`Received message from session ${sessionId}:`, data);
-      
-      if (data.type === 'move' && data.move) {
-        // Broadcast the move to all clients in the session
-        broadcastToSession(sessionId, { 
-          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', // Placeholder - should be handled by game logic
-          san: data.move 
-        });
-      }
-    } catch (error) {
-      console.error('Error parsing WebSocket message:', error);
-    }
-  });
-
-  ws.on('error', (error) => {
-    console.error('WebSocket error:', error);
-  });
-});
-
-// Function to broadcast updates to all clients in a session
-export function broadcastToSession(sessionId: string, data: { fen: string; san?: string; pgn?: string; isCheckmate?: boolean }) {
-  const sessionClients = sessions.get(sessionId);
-  if (sessionClients) {
-    const message = JSON.stringify(data);
-    sessionClients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    });
-  }
-}
+// WebSocket handling is now done in wsHub.ts
 
 // Telegram webhook endpoint
 if (bot) {
@@ -133,27 +72,28 @@ app.get('/health', (req, res) => {
 });
 
 // Import command handlers
-import { handleNewGame, handleMove, handleResign, handleCallbackQuery } from './telechess/commands';
+import { handleNewGame, handleSoloGame, handleMove, handleResign, handleCallbackQuery } from './telechess/commands';
 
 // Set up bot commands
 if (bot) {
   bot.start((ctx) => {
-    ctx.reply('Welcome to TeleChess! ♟️\nSend /new @opponent to start a game.');
+    ctx.reply('Welcome to SPRESS Chess! ♟️\nSend /new @opponent to start a game.');
   });
 
   bot.help((ctx) => {
     ctx.reply(
-      'TeleChess Commands:\n' +
+      'SPRESS Chess Commands:\n' +
       '/new @opponent - Start a new game\n' +
       '/resign - Resign current game\n' +
-      'Send moves in algebraic notation (e.g., e4, Nf3, O-O)\n' +
-      'Click "Launch Mini App" for interactive board'
+      'Use the interactive board to make moves\n' +
+      'Click "♟️ Launch SPRESS Board" to play'
     );
   });
 
   // Register command handlers
   bot.command('new', handleNewGame);
-  bot.command('resign', handleResign);
+bot.command('solo', handleSoloGame);
+bot.command('resign', handleResign);
   bot.on('callback_query', handleCallbackQuery);
   bot.on('text', handleMove);
 

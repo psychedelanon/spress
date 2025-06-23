@@ -30,6 +30,7 @@ export class GameSession {
   public isGameOver: boolean = false;
   public winner?: Player;
   public gameEndReason?: string;
+  public mode?: 'ai' | 'human' = 'human';
 
   constructor(sessionId: string, whitePlayer: Player, blackPlayer: Player) {
     this.chess = new Chess();

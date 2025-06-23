@@ -7,7 +7,7 @@
     "dev:bot": "nodemon --exec ts-node src/server.ts",
     "dev:web": "cd webapp && npm run dev -- --host 0.0.0.0 --port 5173 --open",
     "dev": "concurrently -k \"npm run dev:bot\" \"npm run dev:web\"",
-    "build:backend": "tsc -p tsconfig.json",
+    "build:backend": "tsc -p tsconfig.json --skipLibCheck",
     "build:webapp": "cd webapp && npm ci && npm run build",
     "build": "npm run build:backend && npm run build:webapp",
     "start": "node dist/server.js",
@@ -21,7 +21,6 @@
     "chess.js": "^1.4.0",
     "express": "^5.1.0",
     "http-proxy-middleware": "^3.0.5",
-    "stockfish": "^16.0.0",
     "telegraf": "^4.16.3",
     "undici": "^7.10.0",
     "ws": "^8.18.2"

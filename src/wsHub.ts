@@ -34,20 +34,16 @@ export function initWS(server: import('http').Server) {
       const row = getGame.get(id) as any;
       if (!row) {
         // If no session exists, create a demo session for testing
-        if (id === 'test') {
-          session = {
-            game: new Chess(),
-            clients: new Set(),
-            colors: { 'demo_white': 'w', 'demo_black': 'b' },
-            mode: 'human',
-            lastDm: 0
-          };
-          sessions.set(id, session);
-          console.log(`Created demo session ${id}`);
-        } else {
-          console.log(`Session ${id} not found, closing connection`);
-          return ws.close();
-        }
+        console.log(`Session ${id} not found, creating demo session`);
+        session = {
+          game: new Chess(),
+          clients: new Set(),
+          colors: { 'demo_white': 'w', 'demo_black': 'b' },
+          mode: 'human',
+          lastDm: 0
+        };
+        sessions.set(id, session);
+        console.log(`Created demo session ${id}`);
       } else {
         session = {
           game: new Chess(row.fen),

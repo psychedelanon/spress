@@ -40,20 +40,18 @@ if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(__dirname, '../webapp/dist/index.html'));
   });
 } else {
-  // Proxy webapp requests to Vite dev server in development
-  const { createProxyMiddleware } = require('http-proxy-middleware');
-  
-  app.use('/webapp', createProxyMiddleware({
-    target: 'http://localhost:5173',
-    changeOrigin: true,
-    pathRewrite: {
-      '^/webapp': '', // Remove /webapp prefix when forwarding to Vite
-    },
-    onError: (err: any, req: any, res: any) => {
-      console.error('Proxy error:', err);
-      res.status(500).send('Webapp proxy error - make sure Vite dev server is running on port 5173');
-    }
-  }));
+  // In development, just serve a simple message
+  app.get('/webapp/*', (_req, res) => {
+    res.send(`
+      <html>
+        <body>
+          <h1>Development Mode</h1>
+          <p>Start the webapp dev server: <code>cd webapp && npm run dev</code></p>
+          <p>Then visit: <a href="http://localhost:5173">http://localhost:5173</a></p>
+        </body>
+      </html>
+    `);
+  });
 }
 
 // WebSocket connection handler

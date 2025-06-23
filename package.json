@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "packageManager": "pnpm@8.15.6",
+  "packageManager": "npm@10.9.2",
   "scripts": {
     "dev:bot": "nodemon --exec ts-node src/server.ts",
     "dev:web": "cd webapp && npm run dev -- --host 0.0.0.0 --port 5173 --open",
@@ -12,8 +12,6 @@
     "build:webapp": "cd webapp && npm install --legacy-peer-deps && npm run build",
     "build": "npm run build:backend && npm run build:webapp",
     "start": "node dist/server.js",
-    "postinstall": "cd webapp && npm install --legacy-peer-deps",
-    "install:force": "npm install --legacy-peer-deps --force",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

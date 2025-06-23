@@ -1,0 +1,6 @@
+[variables]
+NODE_VERSION = "20"
+PACKAGE_MANAGER = "pnpm"
+
+[start]
+cmd = "node dist/server.js" 

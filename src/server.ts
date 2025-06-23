@@ -124,7 +124,7 @@ export function broadcastToSession(sessionId: string, data: { fen: string; san?:
 
 // Telegram webhook endpoint
 if (bot) {
-  app.use('/bot', bot.webhookCallback('/bot'));
+  app.post('/bot', bot.webhookCallback('/bot'));
 }
 
 // Health check endpoint
@@ -168,26 +168,14 @@ if (bot) {
 server.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
   
-  // For development, always use polling mode (simpler to test)
-  if (bot && process.env.NODE_ENV === 'production' && process.env.PUBLIC_URL) {
-    const webhookUrl = `${process.env.PUBLIC_URL}/bot`;
-    // Create a valid secret token (only alphanumeric characters allowed)
-    const secretToken = process.env.TELE_TOKEN!.replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
-    
-    bot.telegram.setWebhook(webhookUrl, { 
-      allowed_updates: ['message', 'callback_query', 'inline_query']
-    })
-      .then(() => console.log(`📡 Webhook set to: ${webhookUrl}`))
-      .catch(err => console.error('Failed to set webhook:', err));
-  } else if (bot) {
-    console.log('🔄 Using polling mode for development');
-    console.log('🔑 Bot token:', process.env.TELE_TOKEN ? 'Present' : 'Missing');
-    // For local development, use polling (easier to debug)
+  // Use polling for now to test bot functionality
+  if (bot) {
+    console.log('🔄 Using polling mode for testing');
     bot.launch()
       .then(() => console.log('🤖 Bot launched in polling mode'))
       .catch(err => console.error('❌ Failed to launch bot:', err));
   } else {
-    console.log('🚫 Bot not initialized - skipping webhook/polling setup');
+    console.log('🚫 Bot not initialized - skipping bot setup');
   }
 });
 

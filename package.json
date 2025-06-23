@@ -1,0 +1,34 @@
+{
+  "name": "spress",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev:bot": "nodemon --exec ts-node src/server.ts",
+    "dev:web": "cd webapp && npm run dev -- --host 0.0.0.0 --port 5173 --open",
+    "dev": "concurrently -k \"npm run dev:bot\" \"npm run dev:web\"",
+    "build": "tsc -p tsconfig.json && cd webapp && npm run build",
+    "start": "node dist/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.12.2",
+  "dependencies": {
+    "chess.js": "^1.4.0",
+    "express": "^5.1.0",
+    "telegraf": "^4.16.3",
+    "undici": "^7.10.0",
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^9.2.0",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

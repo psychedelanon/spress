@@ -175,7 +175,6 @@ server.listen(port, () => {
     const secretToken = process.env.TELE_TOKEN!.replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
     
     bot.telegram.setWebhook(webhookUrl, { 
-      secret_token: secretToken,
       allowed_updates: ['message', 'callback_query', 'inline_query']
     })
       .then(() => console.log(`📡 Webhook set to: ${webhookUrl}`))

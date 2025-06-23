@@ -1,12 +1,12 @@
-[variables]
-NODE_VERSION = "20"
-PACKAGE_MANAGER = "npm"
+[nixpacks]
+plan = "node"
 
-[phases.setup]
-nixPkgs = ["nodejs_20", "npm-9_x"]
+[variables]
+BP_NODE_VERSION = "20"
+NPM_CONFIG_LEGACY_PEER_DEPS = "true"
 
 [phases.install]
-cmds = ["npm install --no-audit --no-fund"]
+cmds = ["npm ci --no-audit --no-fund"]
 
 [phases.build]
 cmds = ["npm run build"]

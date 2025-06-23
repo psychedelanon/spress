@@ -10,6 +10,7 @@
     "build:backend": "tsc -p tsconfig.json --skipLibCheck",
     "build:webapp": "cd webapp && npm ci && npm run build",
     "build": "npm run build:backend && npm run build:webapp",
+    "railway:install": "pnpm install --no-frozen-lockfile",
     "start": "node dist/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

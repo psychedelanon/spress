@@ -15,6 +15,9 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    include: ['react', 'react-dom']
+    include: ['react', 'react-dom', 'chess.js', 'react-chessboard', '@twa-dev/sdk']
+  },
+  define: {
+    'process.env.ROLLUP_NATIVE_BINARY': 'false'
   }
 })

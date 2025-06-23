@@ -72,8 +72,32 @@ export function initWS(server: import('http').Server) {
       if (msg.type !== 'move') return;
 
       const { game } = session!;
-      const move = game.move(msg.move);
-      if (!move) return; // illegal move
+      
+      // Parse move - handle both algebraic notation and from-to format
+      let move;
+      try {
+        if (msg.move.length === 4 && /^[a-h][1-8][a-h][1-8]$/.test(msg.move)) {
+          // From-to format like "e2e4"
+          move = game.move({
+            from: msg.move.slice(0, 2),
+            to: msg.move.slice(2, 4),
+            promotion: 'q' // Auto-promote to queen
+          });
+        } else {
+          // Try algebraic notation like "e4" or "Nf3"
+          move = game.move(msg.move);
+        }
+      } catch (error) {
+        console.error('Invalid move format:', msg.move);
+        return;
+      }
+      
+      if (!move) {
+        console.log('Illegal move attempted:', msg.move);
+        return;
+      }
+
+      console.log(`Move made: ${move.san} (${move.from}->${move.to})`);
 
       // Update database with new position
       updateGame.run(game.fen(), game.pgn(), game.turn(), Date.now(), id);
@@ -95,6 +119,7 @@ export function initWS(server: import('http').Server) {
 
       // Check if game is over - cleanup if so
       if (game.isGameOver()) {
+        console.log(`Game ${id} ended: ${game.isCheckmate() ? 'Checkmate' : game.isDraw() ? 'Draw' : 'Game over'}`);
         deleteGame.run(id);
         setTimeout(() => sessions.delete(id), 5000); // Small delay for final messages
         return;
@@ -105,11 +130,27 @@ export function initWS(server: import('http').Server) {
 
       // If AI mode and game not over, make AI move
       if (session!.mode === 'ai' && !game.isGameOver() && game.turn() === 'b') {
+        console.log('AI turn - calculating move...');
         setTimeout(async () => {
           try {
             const aiMove = await bestMove(game.fen());
-            const aiMoveResult = game.move(aiMove);
+            console.log(`AI attempting move: ${aiMove}`);
+            
+            // Parse AI move (should be in from-to format)
+            let aiMoveResult;
+            if (aiMove.length === 4 && /^[a-h][1-8][a-h][1-8]$/.test(aiMove)) {
+              aiMoveResult = game.move({
+                from: aiMove.slice(0, 2),
+                to: aiMove.slice(2, 4),
+                promotion: 'q'
+              });
+            } else {
+              // Try as algebraic notation
+              aiMoveResult = game.move(aiMove);
+            }
+            
             if (aiMoveResult) {
+              console.log(`AI move successful: ${aiMoveResult.san}`);
               // Update database with AI move
               updateGame.run(game.fen(), game.pgn(), game.turn(), Date.now(), id);
               
@@ -120,6 +161,7 @@ export function initWS(server: import('http').Server) {
                 turn: game.turn(),
                 winner: game.isGameOver() ? (game.turn() === 'w' ? 'black' : 'white') : null
               };
+              
               session!.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
                   client.send(JSON.stringify(aiPayload));
@@ -128,14 +170,17 @@ export function initWS(server: import('http').Server) {
 
               // Check if AI move ended the game
               if (game.isGameOver()) {
+                console.log(`AI ended game: ${game.isCheckmate() ? 'Checkmate' : 'Draw'}`);
                 deleteGame.run(id);
                 setTimeout(() => sessions.delete(id), 5000);
               }
+            } else {
+              console.error('AI move failed:', aiMove);
             }
           } catch (error) {
             console.error('AI move error:', error);
           }
-        }, 500); // Small delay for better UX
+        }, 800); // Slight delay for better UX
       }
     });
 

@@ -32,16 +32,32 @@ export function initWS(server: import('http').Server) {
     if (!session) {
       // Try to load from database
       const row = getGame.get(id) as any;
-      if (!row) return ws.close();
-      
-      session = {
-        game: new Chess(row.fen),
-        clients: new Set(),
-        colors: { [row.white_id]: 'w', [row.black_id]: 'b' },
-        mode: row.mode || 'human',
-        lastDm: row.last_dm || 0
-      };
-      sessions.set(id, session);
+      if (!row) {
+        // If no session exists, create a demo session for testing
+        if (id === 'test') {
+          session = {
+            game: new Chess(),
+            clients: new Set(),
+            colors: { 'demo_white': 'w', 'demo_black': 'b' },
+            mode: 'human',
+            lastDm: 0
+          };
+          sessions.set(id, session);
+          console.log(`Created demo session ${id}`);
+        } else {
+          console.log(`Session ${id} not found, closing connection`);
+          return ws.close();
+        }
+      } else {
+        session = {
+          game: new Chess(row.fen),
+          clients: new Set(),
+          colors: { [row.white_id]: 'w', [row.black_id]: 'b' },
+          mode: row.mode || 'human',
+          lastDm: row.last_dm || 0
+        };
+        sessions.set(id, session);
+      }
     }
 
     session.clients.add(ws);

@@ -10,14 +10,12 @@
     "build:backend": "tsc -p tsconfig.json --skipLibCheck",
     "build:webapp": "cd webapp && npm ci && npm run build",
     "build": "npm run build:backend && npm run build:webapp",
-    "railway:install": "pnpm install --no-frozen-lockfile",
     "start": "node dist/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.12.2",
   "dependencies": {
     "chess.js": "^1.4.0",
     "express": "^5.1.0",

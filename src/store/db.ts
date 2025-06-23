@@ -82,4 +82,33 @@ export const getUser = (userId: number) => {
   return userRegistry[userId] || null;
 };
 
-console.log('In-memory database initialized (fallback mode)'); 
+console.log('In-memory database initialized (fallback mode)');
+
+export function getOrCreateSession(id: string, mode: 'solo' | 'pvp'): GameSession {
+  let game = games.get(id);
+  if (game) return game;
+
+  // Reject obviously bogus ids
+  if (!/^[-\w]{8,}$/.test(id)) throw new Error('invalid session id');
+
+  if (mode === 'solo') {
+    game = {
+      id,
+      mode: 'ai',
+      fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      pgn: '',
+      chatId: 0, // Will be set when creating
+      players: {
+        w: { id: 0, username: 'Player', color: 'w' },
+        b: { id: -1, username: 'AI', color: 'b', isAI: true }
+      },
+      winner: null,
+      lastMoveAt: Date.now()
+    };
+  } else {
+    throw new Error('session not found'); // no silent "demo"
+  }
+  
+  games.set(id, game);
+  return game;
+} 

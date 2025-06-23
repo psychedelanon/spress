@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import http from 'http';
 import path from 'node:path';
 import { initWS, setBotInstance } from './wsHub';
-import { registerUser } from './store/db';
+import { registerUser, games } from './store/db';
 import './store/db'; // Initialize database
 
 dotenv.config();
@@ -117,8 +117,20 @@ if (bot) {
 
   // Register command handlers
   bot.command('new', handleNewGame);
-  bot.command('solo', handleSoloGame);
-  bot.command('resign', handleResign);
+bot.command('solo', handleSoloGame);
+bot.command('resign', handleResign);
+
+// Reset command for testing (admin only)
+bot.command('reset', (ctx) => {
+  const adminId = Number(process.env.ADMIN_ID);
+  if (!adminId || ctx.from!.id !== adminId) {
+    return ctx.reply('❌ Access denied');
+  }
+  
+  games.clear();
+  ctx.reply('💥 All games cleared.');
+  console.log(`Admin ${ctx.from!.username} cleared all games`);
+});
   bot.on('callback_query', handleCallbackQuery);
   bot.on('text', handleMove);
 

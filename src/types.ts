@@ -3,6 +3,7 @@ export interface PlayerInfo {
   username?: string;     // @handle (optional)
   dmChatId?: number;     // DM chat with the bot, if known
   color: 'w' | 'b';
+  isAI?: boolean;        // True for AI players
 }
 
 export interface GameSession {

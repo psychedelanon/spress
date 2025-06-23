@@ -37,18 +37,14 @@ function createGameKeyboard(sessionId: string, playerColor: 'w' | 'b'): InlineKe
 
 // /solo command handler
 export async function handleSoloGame(ctx: Context) {
-  const challenger = ctx.from;
-  const chatId = ctx.chat?.id;
+  const userId = ctx.from!.id;
+  const username = ctx.from!.username || 'Player';
+  const chatId = ctx.chat.id;
   
-  if (!challenger || !chatId) {
-    ctx.reply('Error: Could not identify player or chat');
-    return;
-  }
-
   // Register user for DM capability
-  registerUser(challenger.id, chatId, challenger.username);
+  registerUser(userId, chatId, username);
 
-  const sessionId = `solo_${Date.now()}_${challenger.id}`;
+  const sessionId = `solo-${userId}-${Date.now()}`;
   
   // Create new game session with proper structure
   const gameSession: NewGameSession = {
@@ -60,15 +56,16 @@ export async function handleSoloGame(ctx: Context) {
     pgn: '',
     players: {
       w: {
-        id: challenger.id,
-        username: challenger.username,
+        id: userId,
+        username,
         dmChatId: chatId,
         color: 'w'
       },
       b: {
-        id: 0, // AI opponent
+        id: -1,
         username: 'AI',
-        color: 'b'
+        color: 'b',
+        isAI: true
       }
     }
   };
@@ -81,8 +78,8 @@ export async function handleSoloGame(ctx: Context) {
     gameSession.fen,
     gameSession.pgn || '',
     'w', // White always starts
-    challenger.id,
-    0, // AI opponent
+    userId,
+    -1, // AI opponent
     'ai',
     chatId
   );
@@ -102,29 +99,20 @@ export async function handleSoloGame(ctx: Context) {
 
 // /new command handler
 export async function handleNewGame(ctx: Context) {
-  const message = ctx.message;
-  const chatId = ctx.chat?.id;
+  const userId = ctx.from!.id;
+  const username = ctx.from!.username || 'Player';
+  const chatId = ctx.chat.id;
+     const args = ('text' in ctx.message ? ctx.message.text : '').split(' ');
   
-  if (!message || !('text' in message) || !chatId) return;
-
-  const text = message.text;
-  const match = text.match(/^\/new\s+@?(\w+)/);
+  if (args.length < 2 || !args[1].startsWith('@')) {
+    return ctx.reply('Usage: /new @username\nExample: /new @alice');
+  }
   
-  if (!match) {
-    ctx.reply('Usage: /new @username\nExample: /new @johndoe');
-    return;
-  }
-
-  const opponentUsername = match[1];
-  const challenger = ctx.from;
-
-  if (!challenger) {
-    ctx.reply('Error: Could not identify challenger');
-    return;
-  }
-
+  const opponentUsername = args[1].substring(1); // Remove @
+  const sessionId = `pvp-${userId}-${Date.now()}`;
+  
   // Register challenger for DM capability
-  registerUser(challenger.id, chatId, challenger.username);
+  registerUser(userId, chatId, username);
 
   // For demo purposes, we'll create a mock opponent
   // In a real implementation, you'd need to resolve the username to a user ID
@@ -134,8 +122,6 @@ export async function handleNewGame(ctx: Context) {
     first_name: opponentUsername
   };
 
-  const sessionId = generateSessionId(challenger.id, mockOpponent.id);
-  
   // Create new game session with proper structure
   const gameSession: NewGameSession = {
     id: sessionId,
@@ -146,8 +132,8 @@ export async function handleNewGame(ctx: Context) {
     pgn: '',
     players: {
       w: {
-        id: challenger.id,
-        username: challenger.username,
+        id: userId,
+        username,
         dmChatId: chatId,
         color: 'w'
       },
@@ -168,7 +154,7 @@ export async function handleNewGame(ctx: Context) {
     gameSession.fen,
     gameSession.pgn || '',
     'w', // White always starts
-    challenger.id,
+    userId,
     mockOpponent.id,
     'pvp',
     chatId
@@ -324,4 +310,8 @@ Current Position:
       'Good luck! ♟️'
     );
   }
+}
+
+// Export bot configuration function
+export function configureTelegramBot() {
 } 

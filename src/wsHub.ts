@@ -31,6 +31,12 @@ export async function sendTurnNotification(gameSession: GameSession) {
   const player = gameSession.players[turnColor];
   const otherPlayer = gameSession.players[turnColor === 'w' ? 'b' : 'w'];
 
+  // Skip DM notifications for AI players
+  if (player.isAI) {
+    console.log('Skipping notification for AI player');
+    return;
+  }
+
   // Build web-app URL
   const params = new URLSearchParams({
     session: gameSession.id,
@@ -84,49 +90,40 @@ export function initWS(server: import('http').Server) {
   const wss = new WebSocket.Server({ server, path: '/ws' });
 
   wss.on('connection', (ws, req) => {
-    const { searchParams } = new URL(req.url!, 'http://x');
-    const id = searchParams.get('session')!;
-    const color = searchParams.get('color') as 'w' | 'b';
-
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const id = url.searchParams.get('session');
+    const color = url.searchParams.get('color') as 'w' | 'b' | null;
+    
+    if (!id) {
+      ws.close(4000, 'Session ID required');
+      return;
+    }
+    
+    if (!color) {
+      ws.close(4001, 'Color required');
+      return;
+    }
+    
+    console.log(`Player connected to session ${id} as ${color}`);
+    
+    // Get or create session clients
     let sessionClients = sessions.get(id);
     if (!sessionClients) {
-      // Try to load game from database/memory
-      const gameSession = games.get(id);
-      if (!gameSession) {
-        // If no session exists, create a demo session for testing
-        console.log(`Session ${id} not found, creating demo session`);
-        const demoGame: GameSession = {
-          id,
-          chatId: 0, // Demo chat ID
-          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-          mode: 'pvp',
-          lastMoveAt: Date.now(),
-          pgn: '',
-          players: {
-            w: { id: 1, username: 'demo_white', color: 'w' },
-            b: { id: 2, username: 'demo_black', color: 'b' }
-          }
-        };
-        games.set(id, demoGame);
-        
-        sessionClients = {
-          clients: new Set(),
-          game: new Chess()
-        };
-        sessions.set(id, sessionClients);
-        console.log(`Created demo session ${id}`);
-      } else {
-        sessionClients = {
-          clients: new Set(),
-          game: new Chess(gameSession.fen)
-        };
-        sessions.set(id, sessionClients);
-        console.log(`Loaded existing session ${id}`);
-      }
+      sessionClients = { game: new Chess(), clients: new Set() };
+      sessions.set(id, sessionClients);
     }
-
+    
+    // Store color assignment on the WebSocket
+    (ws as any).playerColor = color;
+    
     sessionClients.clients.add(ws);
-    console.log(`Player connected to session ${id} as ${color}`);
+    
+    // Send initial game state
+    ws.send(JSON.stringify({
+      type: 'init',
+      fen: sessionClients.game.fen(),
+      color: color
+    }));
 
     // Send initial game state
     const gameSession = games.get(id);

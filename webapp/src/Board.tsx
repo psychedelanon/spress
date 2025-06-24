@@ -135,7 +135,15 @@ export default function Board({ socket, color, initialFen }: Props) {
   useEffect(() => {
     const handleMessage = (ev: MessageEvent) => {
       const msg = JSON.parse(ev.data);
+      console.log('📨 [WEBSOCKET UPDATE]', msg);
+      
       if (msg.type === 'update') {
+        console.log('🔄 [SERVER UPDATE]', { 
+          serverFen: msg.fen, 
+          currentFen: fen,
+          serverTurn: msg.fen.split(' ')[1],
+          currentTurn: turn
+        });
 
         chessRef.current.load(msg.fen);
         setFen(msg.fen);
@@ -162,10 +170,18 @@ export default function Board({ socket, color, initialFen }: Props) {
   /* ───────────────────────────────────────────────────────── drag handlers */
   const onPieceDrop = useCallback(
     (sourceSquare: string, targetSquare: string) => {
+      console.log('🎯 [MOVE ATTEMPT]', { sourceSquare, targetSquare, turn, color, isGameOver });
+      
       // Don't allow moves if game is over
-      if (isGameOver) return false;
+      if (isGameOver) {
+        console.log('❌ Move blocked: game over');
+        return false;
+      }
       // only allow if it's my move
-      if (turn !== color) return false;
+      if (turn !== color) {
+        console.log('❌ Move blocked: wrong turn', { turn, color });
+        return false;
+      }
 
       const move = chessRef.current.move({
         from: sourceSquare,
@@ -189,10 +205,17 @@ export default function Board({ socket, color, initialFen }: Props) {
       }
 
       // Update ALL state immediately after local move (fix race condition)
-      setFen(chessRef.current.fen());
-      setTurn(chessRef.current.turn());
-      setIsInCheck(chessRef.current.inCheck());
-      setIsGameOver(chessRef.current.isGameOver());
+      const newFen = chessRef.current.fen();
+      const newTurn = chessRef.current.turn();
+      const newCheck = chessRef.current.inCheck();
+      const newGameOver = chessRef.current.isGameOver();
+      
+      console.log('🔄 [LOCAL UPDATE]', { newFen, newTurn, newCheck, newGameOver });
+      
+      setFen(newFen);
+      setTurn(newTurn);
+      setIsInCheck(newCheck);
+      setIsGameOver(newGameOver);
       setSelectedSquare(null); // Clear selection immediately
 
       // send UCI to backend with capture info

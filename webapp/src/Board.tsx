@@ -324,8 +324,9 @@ export default function Board({ socket, color, initialFen }: Props) {
           setCaptureToast(`💥 ${capturingColor} captured a ${capturedPieceName}!`);
         }
 
-        setFen(chessRef.current.fen());
-        console.log('[Board] Move sent:', selectedSquare + square, 'New FEN:', chessRef.current.fen());
+        const newFen = chessRef.current.fen();
+        setFen(newFen);
+        console.log('[Board] Tap move sent:', selectedSquare + square, 'New FEN:', newFen);
         
         // Send move with capture info
         const moveData: any = { type: 'move', move: selectedSquare + square };

@@ -209,12 +209,19 @@ export function initWS(server: import('http').Server) {
         san: move.san,
         turn: game.turn(),
         winner: isGameOver ? (game.isDraw() ? null : (game.turn() === 'w' ? 'black' : 'white')) : null,
-        isDraw: isGameOver && game.isDraw(),
-        isCheckmate: isGameOver && game.isCheckmate(),
+        isDraw: isGameOver ? game.isDraw() : false,
+        isCheckmate: isGameOver ? game.isCheckmate() : false,
         isInCheck: game.inCheck(),
         captured: captureInfo,
         captureSquare: msg.captureSquare || null
       };
+
+      console.log(`[Server] Sending payload:`, { 
+        winner: payload.winner, 
+        isDraw: payload.isDraw, 
+        isGameOver: isGameOver,
+        isCheckmate: payload.isCheckmate 
+      });
 
       // Broadcast to all clients in this session
       sessionClients!.clients.forEach(client => {
@@ -288,12 +295,19 @@ export function initWS(server: import('http').Server) {
                 san: aiMoveResult.san,
                 turn: game.turn(),
                 winner: aiGameOver ? (game.isDraw() ? null : (game.turn() === 'w' ? 'black' : 'white')) : null,
-                isDraw: aiGameOver && game.isDraw(),
-                isCheckmate: aiGameOver && game.isCheckmate(),
+                isDraw: aiGameOver ? game.isDraw() : false,
+                isCheckmate: aiGameOver ? game.isCheckmate() : false,
                 isInCheck: game.inCheck(),
                 captured: aiMoveResult.captured ? `${aiMoveResult.captured}` : null,
                 captureSquare: aiMoveResult.captured ? aiMoveResult.to : null
               };
+
+              console.log(`[Server] AI payload:`, { 
+                winner: aiPayload.winner, 
+                isDraw: aiPayload.isDraw, 
+                isGameOver: aiGameOver,
+                isCheckmate: aiPayload.isCheckmate 
+              });
               
               sessionClients!.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {

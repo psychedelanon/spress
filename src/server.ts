@@ -172,7 +172,14 @@ server.listen(port, () => {
   if (bot) {
     if (process.env.NODE_ENV === 'production') {
       console.log('🔗 Production mode - bot will use webhooks');
-      // Webhook is set up via /bot endpoint - no polling needed
+      
+      // Automatically set webhook URL
+      const webhookUrl = `${process.env.PUBLIC_URL || 'https://spress-production.up.railway.app'}/bot`;
+      console.log(`🔗 Setting webhook to: ${webhookUrl}`);
+      
+      bot.telegram.setWebhook(webhookUrl)
+        .then(() => console.log('✅ Webhook set successfully'))
+        .catch(err => console.error('❌ Failed to set webhook:', err));
     } else {
       console.log('🔄 Development mode - using polling');
       bot.launch()

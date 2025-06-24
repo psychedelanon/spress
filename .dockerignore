@@ -53,4 +53,7 @@ coverage/
 .env.example
 
 # But include our webapp file
- 
+
+# Ensure source files are included
+!src/
+!tsconfig.json

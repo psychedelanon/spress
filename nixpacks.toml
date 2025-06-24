@@ -13,8 +13,7 @@ cmds = [
 
 [phases.build]
 cmds = [
-  "npm run build:backend",
-  "npm run build:webapp"
+  "npm run build"
 ]
 
 [start]

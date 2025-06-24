@@ -136,6 +136,11 @@ export default function Board({ socket, color, initialFen }: Props) {
     const handleMessage = (ev: MessageEvent) => {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'update') {
+        console.log('[Board] Received update:', { 
+          winner: msg.winner, 
+          isDraw: msg.isDraw, 
+          isGameOver: !!msg.winner || !!msg.isDraw 
+        });
         chessRef.current.load(msg.fen);
         setFen(msg.fen);
         setTurn(msg.fen.split(' ')[1] as 'w' | 'b');
@@ -287,6 +292,7 @@ export default function Board({ socket, color, initialFen }: Props) {
 
   // Handle square clicks for mobile tap-to-select
   const onSquareClick = useCallback((square: string) => {
+    console.log('[Board] Square clicked:', { square, turn, color, isGameOver });
     if (turn !== color || isGameOver) return;
     
     const piece = chessRef.current.get(square as any);
@@ -319,6 +325,7 @@ export default function Board({ socket, color, initialFen }: Props) {
         }
 
         setFen(chessRef.current.fen());
+        console.log('[Board] Move sent:', selectedSquare + square, 'New FEN:', chessRef.current.fen());
         
         // Send move with capture info
         const moveData: any = { type: 'move', move: selectedSquare + square };

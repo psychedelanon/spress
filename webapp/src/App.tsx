@@ -71,6 +71,11 @@ function App() {
           isCheckmate: msg.isCheckmate || false
         });
       } else if (msg.type === 'update') {
+        console.log('[App] Received update:', { 
+          winner: msg.winner, 
+          isDraw: msg.isDraw, 
+          isGameOver: !!msg.winner || !!msg.isDraw 
+        });
         setGameState(prev => {
           const isGameOver = !!msg.winner || !!msg.isDraw;
           const winner = msg.winner;

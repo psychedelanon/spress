@@ -1,16 +1,16 @@
 # Railway ignore file - specify files to exclude from deployment
 # Keep this minimal to ensure all necessary files are included
 
-# Development files
-src/
-webapp/src/
+# Development files - ALLOW src/ for compilation!
+# src/  # REMOVED - Railway needs this to compile TypeScript
+# webapp/src/  # REMOVED - Railway needs this to build frontend
 webapp/node_modules/
 node_modules/
 
-# Development configs
-tsconfig.json
-webapp/tsconfig*.json
-webapp/vite.config.ts
+# Development configs - ALLOW for compilation!
+# tsconfig.json  # REMOVED - Railway needs this for tsc
+# webapp/tsconfig*.json  # REMOVED - Railway needs this for Vite
+# webapp/vite.config.ts  # REMOVED - Railway needs this for Vite
 webapp/eslint.config.js
 
 # Don't ignore built files

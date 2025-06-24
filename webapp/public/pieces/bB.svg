@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="blackGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#444444;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#111111;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Black Bishop -->
+  <g transform="translate(200,200)">
+    <!-- Top -->
+    <circle cx="0" cy="-110" r="15" fill="url(#blackGradient)" stroke="#fff" stroke-width="3"/>
+    <!-- Head -->
+    <ellipse cx="0" cy="-80" rx="25" ry="30" fill="url(#blackGradient)" stroke="#fff" stroke-width="3"/>
+    <!-- Body -->
+    <path d="M-35,-50 Q-40,0 -30,30 L30,30 Q40,0 35,-50 Z" fill="url(#blackGradient)" stroke="#fff" stroke-width="3"/>
+    <!-- Base -->
+    <ellipse cx="0" cy="45" rx="60" ry="30" fill="url(#blackGradient)" stroke="#fff" stroke-width="3"/>
+  </g>
+</svg> 

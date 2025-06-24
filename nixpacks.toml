@@ -1,9 +1,9 @@
-[nixpacks]
-plan = "node"
-
 [variables]
-BP_NODE_VERSION = "20"
 NODE_ENV = "production"
+NIXPACKS_NODE_VERSION = "20"
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
 
 [phases.install]
 cmds = [
@@ -13,8 +13,8 @@ cmds = [
 
 [phases.build]
 cmds = [
-  "npm run build",
-  "cd webapp && npm run build"
+  "npm run build:backend",
+  "npm run build:webapp"
 ]
 
 [start]

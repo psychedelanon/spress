@@ -1,0 +1,27 @@
+# Railway ignore file - specify files to exclude from deployment
+# Keep this minimal to ensure all necessary files are included
+
+# Development files
+src/
+webapp/src/
+webapp/node_modules/
+node_modules/
+
+# Development configs
+tsconfig.json
+webapp/tsconfig*.json
+webapp/vite.config.ts
+webapp/eslint.config.js
+
+# Don't ignore built files
+!dist/
+!webapp/dist/
+
+# Git files
+.git/
+.gitignore
+
+# Temporary files
+*.log
+*.tmp
+.DS_Store 

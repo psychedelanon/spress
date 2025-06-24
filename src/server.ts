@@ -38,31 +38,36 @@ app.use(express.static('public'));
 
 // Serve webapp static files in production or fallback
 if (process.env.NODE_ENV === 'production') {
-  try {
-    app.use(
-      '/webapp',
-      express.static(path.join(__dirname, '../webapp/dist'), { maxAge: '1h' })
-    );
-    app.get('/webapp/*', (_req, res) => {
-      res.sendFile(path.join(__dirname, '../webapp/dist/index.html'));
+  const webappDistPath = path.join(__dirname, '../webapp/dist');
+  const webappIndexPath = path.join(webappDistPath, 'index.html');
+  
+  console.log('🌐 Setting up webapp static files...');
+  console.log('   Dist path:', webappDistPath);
+  console.log('   Index path:', webappIndexPath);
+  
+  // Serve static files
+  app.use('/webapp', express.static(webappDistPath, { maxAge: '1h' }));
+  
+  // Serve index.html for all webapp routes
+  app.get('/webapp/*', (_req, res) => {
+    res.sendFile(webappIndexPath, (err) => {
+      if (err) {
+        console.error('Failed to serve webapp index.html:', err);
+        res.status(500).send(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>SPRESS Chess</title></head>
+          <body style="background:#00102E;color:#FFD700;font-family:system-ui;text-align:center;padding:50px;">
+            <h1>🏗️ SPRESS Chess</h1>
+            <p>Mini App is being built...</p>
+            <p>Use bot commands for now: /new @username</p>
+            <p>Check back soon for the interactive board!</p>
+          </body>
+          </html>
+        `);
+      }
     });
-  } catch (error) {
-    console.warn('⚠️ Webapp dist not found, serving fallback');
-    app.get('/webapp/*', (_req, res) => {
-      res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head><title>SPRESS Chess</title></head>
-        <body style="background:#00102E;color:#FFD700;font-family:system-ui;text-align:center;padding:50px;">
-          <h1>🏗️ SPRESS Chess</h1>
-          <p>Mini App is being built...</p>
-          <p>Use bot commands for now: /new @username</p>
-          <p>Check back soon for the interactive board!</p>
-        </body>
-        </html>
-      `);
-    });
-  }
+  });
 } else {
   // In development, just serve a simple message
   app.get('/webapp/*', (_req, res) => {
@@ -153,12 +158,17 @@ bot.command('reset', (ctx) => {
 server.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
   
-  // Use polling for now to test bot functionality
+  // In production (Railway), use webhooks; in development, use polling
   if (bot) {
-    console.log('🔄 Using polling mode for testing');
-    bot.launch()
-      .then(() => console.log('🤖 Bot launched in polling mode'))
-      .catch(err => console.error('❌ Failed to launch bot:', err));
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🔗 Production mode - bot will use webhooks');
+      // Webhook is set up via /bot endpoint - no polling needed
+    } else {
+      console.log('🔄 Development mode - using polling');
+      bot.launch()
+        .then(() => console.log('🤖 Bot launched in polling mode'))
+        .catch(err => console.error('❌ Failed to launch bot:', err));
+    }
   } else {
     console.log('🚫 Bot not initialized - skipping bot setup');
   }
@@ -167,7 +177,9 @@ server.listen(port, () => {
 // Graceful shutdown
 process.once('SIGINT', () => {
   console.log('Received SIGINT, shutting down gracefully');
-  if (bot) bot.stop('SIGINT');
+  if (bot && process.env.NODE_ENV !== 'production') {
+    bot.stop('SIGINT');
+  }
   server.close(() => {
     process.exit(0);
   });
@@ -175,7 +187,9 @@ process.once('SIGINT', () => {
 
 process.once('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully');
-  if (bot) bot.stop('SIGTERM');
+  if (bot && process.env.NODE_ENV !== 'production') {
+    bot.stop('SIGTERM');
+  }
   server.close(() => {
     process.exit(0);
   });

@@ -21,7 +21,7 @@ export function setBotInstance(bot: any) {
 /**
  * Robust turn notification that prevents 400 Bad Request errors
  */
-export async function sendTurnNotification(gameSession: GameSession) {
+export async function sendTurnNotification(gameSession: GameSession, captureInfo?: string) {
   if (!botInstance) {
     console.warn('Bot instance not available for notifications');
     return;
@@ -45,9 +45,10 @@ export async function sendTurnNotification(gameSession: GameSession) {
   const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
   const boardUrl = `${base}/webapp/?${params.toString()}`;
 
-  // Message text
+  // Message text with optional capture info
   const mention = player.username ? `@${player.username}` : 'Your';
-  const text = `♟️ ${mention} move`;
+  const captureText = captureInfo ? `   |   💥 ${captureInfo} captured!` : '';
+  const text = `♟️ ${mention} move${captureText}`;
 
   // Inline "Open board" button
   const markup = {
@@ -126,12 +127,16 @@ export function initWS(server: import('http').Server) {
     }
     
     // >>> immediate position snapshot <<<
+    const isGameOver = sessionClients.game.isGameOver();
     const payload = JSON.stringify({
       type: 'update',
       fen: sessionClients.game.fen(),
       turn: sessionClients.game.turn(),
-      winner: sessionClients.game.isGameOver() ? 
-        (sessionClients.game.turn() === 'w' ? 'black' : 'white') : null
+      winner: isGameOver ? 
+        (sessionClients.game.isDraw() ? null : (sessionClients.game.turn() === 'w' ? 'black' : 'white')) : null,
+      isDraw: isGameOver && sessionClients.game.isDraw(),
+      isCheckmate: isGameOver && sessionClients.game.isCheckmate(),
+      isInCheck: sessionClients.game.inCheck()
     });
     ws.send(payload);
     console.log(`➡️ sent FEN to ${color} for session ${id}`);
@@ -143,6 +148,14 @@ export function initWS(server: import('http').Server) {
       const { game } = sessionClients!;
       const gameSession = games.get(id);
       if (!gameSession) return;
+      
+      // Validate it's the correct player's turn
+      const currentTurn = game.turn();
+      const playerColor = (ws as any).playerColor;
+      if (currentTurn !== playerColor) {
+        console.log(`Invalid move attempt: ${playerColor} tried to move on ${currentTurn}'s turn`);
+        return;
+      }
       
       // Parse move - normalize UCI format (e2e4, e7e8q, etc.)
       let move;
@@ -172,6 +185,9 @@ export function initWS(server: import('http').Server) {
 
       console.log(`Move made in ${id}: ${move.san} (${move.from}->${move.to})`);
 
+      // Extract capture info from the move or message
+      const captureInfo = move.captured ? `${move.captured}` : (msg.captured || null);
+
       // Update game session
       gameSession.fen = game.fen();
       gameSession.pgn = game.pgn();
@@ -180,12 +196,18 @@ export function initWS(server: import('http').Server) {
       // Update database with new position
       updateGame.run(game.fen(), game.pgn(), game.turn(), Date.now(), id);
 
+      const isGameOver = game.isGameOver();
       const payload = {
         type: 'update',
         fen: game.fen(),
         san: move.san,
         turn: game.turn(),
-        winner: game.isGameOver() ? (game.turn() === 'w' ? 'black' : 'white') : null
+        winner: isGameOver ? (game.isDraw() ? null : (game.turn() === 'w' ? 'black' : 'white')) : null,
+        isDraw: isGameOver && game.isDraw(),
+        isCheckmate: isGameOver && game.isCheckmate(),
+        isInCheck: game.inCheck(),
+        captured: captureInfo,
+        captureSquare: msg.captureSquare || null
       };
 
       // Broadcast to all clients in this session
@@ -198,7 +220,14 @@ export function initWS(server: import('http').Server) {
       // Check if game is over - cleanup if so
       if (game.isGameOver()) {
         console.log(`Game ${id} ended: ${game.isCheckmate() ? 'Checkmate' : game.isDraw() ? 'Draw' : 'Game over'}`);
-        gameSession.winner = game.turn() === 'w' ? 'black' : 'white';
+        
+        // Only set winner if not a draw
+        if (!game.isDraw()) {
+          gameSession.winner = game.turn() === 'w' ? 'black' : 'white';
+        } else {
+          gameSession.winner = null;
+        }
+        
         deleteGame.run(id);
         setTimeout(() => {
           sessions.delete(id);
@@ -208,7 +237,7 @@ export function initWS(server: import('http').Server) {
       }
 
       // Send turn notification using the robust function
-      await sendTurnNotification(gameSession);
+      await sendTurnNotification(gameSession, captureInfo);
 
       // If AI mode and game not over, make AI move
       if (gameSession.mode === 'ai' && !game.isGameOver() && game.turn() === 'b') {
@@ -246,12 +275,16 @@ export function initWS(server: import('http').Server) {
               // Update database with AI move
               updateGame.run(game.fen(), game.pgn(), game.turn(), Date.now(), id);
               
+              const aiGameOver = game.isGameOver();
               const aiPayload = {
                 type: 'update',
                 fen: game.fen(),
                 san: aiMoveResult.san,
                 turn: game.turn(),
-                winner: game.isGameOver() ? (game.turn() === 'w' ? 'black' : 'white') : null
+                winner: aiGameOver ? (game.isDraw() ? null : (game.turn() === 'w' ? 'black' : 'white')) : null,
+                isDraw: aiGameOver && game.isDraw(),
+                isCheckmate: aiGameOver && game.isCheckmate(),
+                isInCheck: game.inCheck()
               };
               
               sessionClients!.clients.forEach(client => {
@@ -263,14 +296,21 @@ export function initWS(server: import('http').Server) {
               // Check if AI move ended the game
               if (game.isGameOver()) {
                 console.log(`AI ended game: ${game.isCheckmate() ? 'Checkmate' : 'Draw'}`);
-                gameSession.winner = game.turn() === 'w' ? 'black' : 'white';
+                
+                // Only set winner if not a draw
+                if (!game.isDraw()) {
+                  gameSession.winner = game.turn() === 'w' ? 'black' : 'white';
+                } else {
+                  gameSession.winner = null;
+                }
+                
                 deleteGame.run(id);
                 setTimeout(() => {
                   sessions.delete(id);
                   games.delete(id);
                 }, 5000);
               } else {
-                // Send notification for human player's turn
+                // Send notification for human player's turn (no capture info for AI moves for now)
                 await sendTurnNotification(gameSession);
               }
             } else {

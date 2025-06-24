@@ -11,7 +11,7 @@
     "dev:bot": "nodemon --exec ts-node src/server.ts",
     "dev:web": "cd webapp && npm run dev -- --host 0.0.0.0 --port 5173 --open",
     "dev": "concurrently -k \"npm run dev:bot\" \"npm run dev:web\"",
-    "build:backend": "tsc -p tsconfig.json --skipLibCheck",
+    "build:backend": "tsc --skipLibCheck",
     "build:webapp": "cd webapp && npm run build",
     "build": "npm run build:backend && npm run build:webapp",
     "start": "node dist/server.js",

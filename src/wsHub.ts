@@ -99,8 +99,8 @@ export function initWS(server: import('http').Server) {
       return;
     }
     
-    if (!color) {
-      ws.close(4001, 'Color required');
+    if (color !== 'w' && color !== 'b') {
+      ws.close(4001, 'color required');
       return;
     }
     
@@ -126,13 +126,15 @@ export function initWS(server: import('http').Server) {
     }
     
     // >>> immediate position snapshot <<<
-    ws.send(JSON.stringify({
+    const payload = JSON.stringify({
       type: 'update',
       fen: sessionClients.game.fen(),
       turn: sessionClients.game.turn(),
       winner: sessionClients.game.isGameOver() ? 
         (sessionClients.game.turn() === 'w' ? 'black' : 'white') : null
-    }));
+    });
+    ws.send(payload);
+    console.log(`➡️ sent FEN to ${color} for session ${id}`);
 
     ws.on('message', async raw => {
       const msg = JSON.parse(raw.toString());

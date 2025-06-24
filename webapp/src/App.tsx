@@ -25,7 +25,7 @@ function App() {
 
     // Create WebSocket connection
     const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${wsProtocol}://${location.host}/ws?session=${session}`);
+    const ws = new WebSocket(`${wsProtocol}://${location.host}/ws?session=${session}&color=${color}`);
     
     ws.onopen = () => {
       console.log('🔌 WebSocket connected');
@@ -45,12 +45,25 @@ function App() {
           status: 'Playing'
         });
       } else if (msg.type === 'update') {
-        setGameState(prev => prev ? {
-          ...prev,
-          fen: msg.fen,
-          turn: msg.turn,
-          status: msg.winner ? `Game Over - ${msg.winner} wins!` : 'Playing'
-        } : null);
+        setGameState(prev => {
+          // Create initial game state if this is the first message
+          if (!prev) {
+            return {
+              fen: msg.fen,
+              color,
+              session,
+              turn: msg.turn,
+              status: msg.winner ? `Game Over - ${msg.winner} wins!` : 'Playing'
+            };
+          } else {
+            return {
+              ...prev,
+              fen: msg.fen,
+              turn: msg.turn,
+              status: msg.winner ? `Game Over - ${msg.winner} wins!` : 'Playing'
+            };
+          }
+        });
       }
     };
 

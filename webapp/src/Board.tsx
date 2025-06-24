@@ -136,11 +136,7 @@ export default function Board({ socket, color, initialFen }: Props) {
     const handleMessage = (ev: MessageEvent) => {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'update') {
-        console.log('[Board] Received update:', { 
-          winner: msg.winner, 
-          isDraw: msg.isDraw, 
-          isGameOver: !!msg.winner || !!msg.isDraw 
-        });
+
         chessRef.current.load(msg.fen);
         setFen(msg.fen);
         setTurn(msg.fen.split(' ')[1] as 'w' | 'b');
@@ -152,7 +148,8 @@ export default function Board({ socket, color, initialFen }: Props) {
         // Show capture flash if this was from a capture by opponent
         if (msg.captured && msg.captureSquare) {
           setCaptureFlashSquare(msg.captureSquare);
-          setCaptureToast(`💥 ${msg.captured} captured!`);
+          const capturedName = pieceNames[msg.captured.toLowerCase()] || 'Piece';
+          setCaptureToast(`💥 ${capturedName} captured!`);
           setTimeout(() => setCaptureFlashSquare(null), 400);
         }
       }
@@ -191,7 +188,12 @@ export default function Board({ socket, color, initialFen }: Props) {
         setCaptureToast(`💥 ${capturingColor} captured a ${capturedPieceName}!`);
       }
 
+      // Update ALL state immediately after local move (fix race condition)
       setFen(chessRef.current.fen());
+      setTurn(chessRef.current.turn());
+      setIsInCheck(chessRef.current.inCheck());
+      setIsGameOver(chessRef.current.isGameOver());
+      setSelectedSquare(null); // Clear selection immediately
 
       // send UCI to backend with capture info
       const moveData: any = { type: 'move', move: sourceSquare + targetSquare };
@@ -292,7 +294,7 @@ export default function Board({ socket, color, initialFen }: Props) {
 
   // Handle square clicks for mobile tap-to-select
   const onSquareClick = useCallback((square: string) => {
-    console.log('[Board] Square clicked:', { square, turn, color, isGameOver });
+
     if (turn !== color || isGameOver) return;
     
     const piece = chessRef.current.get(square as any);
@@ -324,9 +326,13 @@ export default function Board({ socket, color, initialFen }: Props) {
           setCaptureToast(`💥 ${capturingColor} captured a ${capturedPieceName}!`);
         }
 
+        // Update ALL state immediately after tap move (fix race condition)
         const newFen = chessRef.current.fen();
         setFen(newFen);
-        console.log('[Board] Tap move sent:', selectedSquare + square, 'New FEN:', newFen);
+        setTurn(chessRef.current.turn());
+        setIsInCheck(chessRef.current.inCheck());
+        setIsGameOver(chessRef.current.isGameOver());
+        
         
         // Send move with capture info
         const moveData: any = { type: 'move', move: selectedSquare + square };

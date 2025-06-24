@@ -216,12 +216,7 @@ export function initWS(server: import('http').Server) {
         captureSquare: msg.captureSquare || null
       };
 
-      console.log(`[Server] Sending payload:`, { 
-        winner: payload.winner, 
-        isDraw: payload.isDraw, 
-        isGameOver: isGameOver,
-        isCheckmate: payload.isCheckmate 
-      });
+
 
       // Broadcast to all clients in this session
       sessionClients!.clients.forEach(client => {
@@ -302,12 +297,7 @@ export function initWS(server: import('http').Server) {
                 captureSquare: aiMoveResult.captured ? aiMoveResult.to : null
               };
 
-              console.log(`[Server] AI payload:`, { 
-                winner: aiPayload.winner, 
-                isDraw: aiPayload.isDraw, 
-                isGameOver: aiGameOver,
-                isCheckmate: aiPayload.isCheckmate 
-              });
+
               
               sessionClients!.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {

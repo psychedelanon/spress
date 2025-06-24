@@ -17,8 +17,7 @@ const createPieceComponent = (pieceName: string) => {
     }
     
     // Add cache busting and retry logic - respect Vite base path and use SVG
-    const base = import.meta.env.BASE_URL ?? '/';
-    const imageUrl = `${base}pieces/${pieceName}.svg?v=${Date.now()}&retry=${retryCount}`;
+    const imageUrl = `${import.meta.env.BASE_URL}pieces/${pieceName}.svg?v=${Date.now()}&retry=${retryCount}`;
     
     return (
       <img 
@@ -105,7 +104,6 @@ export default function Board({ socket, color, initialFen }: Props) {
     
     // Test if piece files are accessible
     const testImg = new Image();
-    const base = import.meta.env.BASE_URL ?? '/';
     testImg.onload = () => {
       console.log('[DEBUG] ✅ wK.svg loaded successfully');
       console.log('[DEBUG] Image dimensions:', testImg.width, 'x', testImg.height);
@@ -115,7 +113,7 @@ export default function Board({ socket, color, initialFen }: Props) {
       console.error('[DEBUG] Error details:', error);
       
       // Try fetching directly to get more info
-      fetch(`${base}pieces/wK.svg`)
+      fetch(`${import.meta.env.BASE_URL}pieces/wK.svg`)
         .then(response => {
           console.log('[DEBUG] Fetch response status:', response.status);
           console.log('[DEBUG] Content-Type:', response.headers.get('content-type'));
@@ -129,7 +127,7 @@ export default function Board({ socket, color, initialFen }: Props) {
           console.error('[DEBUG] Fetch error:', fetchError);
         });
     };
-    testImg.src = `${base}pieces/wK.svg`;
+    testImg.src = `${import.meta.env.BASE_URL}pieces/wK.svg`;
   }, []);
 
   /* ───────────────────────────────────────────────────────── event listeners */

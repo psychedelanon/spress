@@ -36,13 +36,13 @@ export const ChessBoardView: React.FC<ChessBoardViewProps> = ({ sessionId }) => 
     
     const websocket = new WebSocket(wsUrl);
     
-    websocket.onopen = () => {
+    const handleOpen = () => {
       console.log('WebSocket connected');
       setConnectionStatus('connected');
       setWs(websocket);
     };
 
-    websocket.onmessage = (event) => {
+    const handleMessage = (event: MessageEvent) => {
       try {
         const data: GameState = JSON.parse(event.data);
         console.log('Received game state:', data);
@@ -64,18 +64,27 @@ export const ChessBoardView: React.FC<ChessBoardViewProps> = ({ sessionId }) => 
       }
     };
 
-    websocket.onclose = () => {
+    const handleClose = () => {
       console.log('WebSocket disconnected');
       setConnectionStatus('disconnected');
       setWs(null);
     };
 
-    websocket.onerror = (error) => {
+    const handleError = (error: Event) => {
       console.error('WebSocket error:', error);
       setConnectionStatus('disconnected');
     };
 
+    websocket.addEventListener('open', handleOpen);
+    websocket.addEventListener('message', handleMessage);
+    websocket.addEventListener('close', handleClose);
+    websocket.addEventListener('error', handleError);
+
     return () => {
+      websocket.removeEventListener('open', handleOpen);
+      websocket.removeEventListener('message', handleMessage);
+      websocket.removeEventListener('close', handleClose);
+      websocket.removeEventListener('error', handleError);
       websocket.close();
     };
   }, [sessionId, chess, telegram]);

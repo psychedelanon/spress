@@ -1,59 +1,8 @@
-# Development files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Node modules
+# Only exclude what's absolutely necessary
 node_modules/
 webapp/node_modules/
-
-# Build artifacts
-dist/
-build/
-*.tsbuildinfo
-
-# Development and testing
-.vscode/
-.idea/
-*.log
-logs/
-*.pid
-*.seed
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Git
 .git/
-.gitignore
-
-# Documentation
-README.md
-docs/
-
-# Development scripts
-scripts/
-
-# Temporary files
-*.tmp
-*.temp
-
-# Source maps
-*.map
-
-# Coverage
-coverage/
-.nyc_output/
-
-# Local development
-.eslintcache
-.env.example
-
-# But include our webapp file
-
-# Ensure source files are included
-!src/
-!tsconfig.json
+*.log
+.env
+.env.*
+!.env.example

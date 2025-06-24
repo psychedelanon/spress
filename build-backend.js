@@ -21,10 +21,23 @@ function findTsFiles(dir, files = []) {
 
 try {
   console.log('🔍 Finding TypeScript files...');
+  
+  // Debug: Check if src directory exists
+  if (!fs.existsSync('src')) {
+    console.error('❌ src directory does not exist');
+    console.log('📁 Current directory contents:');
+    const contents = fs.readdirSync('.');
+    console.log(contents);
+    process.exit(1);
+  }
+  
   const tsFiles = findTsFiles('src');
   
   if (tsFiles.length === 0) {
     console.error('❌ No TypeScript files found in src directory');
+    console.log('📁 src directory contents:');
+    const srcContents = fs.readdirSync('src');
+    console.log(srcContents);
     process.exit(1);
   }
   

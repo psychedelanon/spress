@@ -93,6 +93,13 @@ if (bot) {
   app.post('/bot', bot.webhookCallback('/bot'));
 }
 
+// Redirect root to webapp in production
+if (process.env.NODE_ENV === 'production') {
+  app.get('/', (req, res) => {
+    res.redirect('/webapp/');
+  });
+}
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

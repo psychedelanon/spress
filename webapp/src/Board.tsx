@@ -16,8 +16,9 @@ const createPieceComponent = (pieceName: string) => {
       return null;
     }
     
-    // Add cache busting and retry logic
-    const imageUrl = `/pieces/${pieceName}.svg?v=${Date.now()}&retry=${retryCount}`;
+    // Add cache busting and retry logic - respect Vite base path and use SVG
+    const base = import.meta.env.BASE_URL ?? '/';
+    const imageUrl = `${base}pieces/${pieceName}.svg?v=${Date.now()}&retry=${retryCount}`;
     
     return (
       <img 
@@ -104,6 +105,7 @@ export default function Board({ socket, color, initialFen }: Props) {
     
     // Test if piece files are accessible
     const testImg = new Image();
+    const base = import.meta.env.BASE_URL ?? '/';
     testImg.onload = () => {
       console.log('[DEBUG] ✅ wK.svg loaded successfully');
       console.log('[DEBUG] Image dimensions:', testImg.width, 'x', testImg.height);
@@ -113,7 +115,7 @@ export default function Board({ socket, color, initialFen }: Props) {
       console.error('[DEBUG] Error details:', error);
       
       // Try fetching directly to get more info
-      fetch('/pieces/wK.svg')
+      fetch(`${base}pieces/wK.svg`)
         .then(response => {
           console.log('[DEBUG] Fetch response status:', response.status);
           console.log('[DEBUG] Content-Type:', response.headers.get('content-type'));
@@ -127,12 +129,12 @@ export default function Board({ socket, color, initialFen }: Props) {
           console.error('[DEBUG] Fetch error:', fetchError);
         });
     };
-    testImg.src = '/pieces/wK.svg';
+    testImg.src = `${base}pieces/wK.svg`;
   }, []);
 
   /* ───────────────────────────────────────────────────────── event listeners */
   useEffect(() => {
-    socket.onmessage = ev => {
+    const handleMessage = (ev: MessageEvent) => {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'update') {
         chessRef.current.load(msg.fen);
@@ -151,6 +153,9 @@ export default function Board({ socket, color, initialFen }: Props) {
         }
       }
     };
+    
+    socket.addEventListener('message', handleMessage);
+    return () => socket.removeEventListener('message', handleMessage);
   }, [socket]);
 
   /* ───────────────────────────────────────────────────────── drag handlers */

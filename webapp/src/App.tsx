@@ -51,7 +51,7 @@ function App() {
       setSocket(ws);
     };
 
-    ws.onmessage = (event) => {
+    const handleMessage = (event: MessageEvent) => {
       const msg = JSON.parse(event.data);
       console.log('WebSocket message:', msg);
       
@@ -117,6 +117,8 @@ function App() {
       }
     };
 
+    ws.addEventListener('message', handleMessage);
+
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
@@ -127,6 +129,7 @@ function App() {
     };
 
     return () => {
+      ws.removeEventListener('message', handleMessage);
       ws.close();
     };
   }, []);

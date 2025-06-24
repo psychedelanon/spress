@@ -48,6 +48,9 @@ if (process.env.NODE_ENV === 'production') {
   // Serve static files
   app.use('/webapp', express.static(webappDistPath, { maxAge: '1h' }));
   
+  // Explicit route for pieces (fallback safety - ensures PNGs are accessible)
+  app.use('/webapp/pieces', express.static(path.join(webappDistPath, 'pieces'), { maxAge: '1h' }));
+  
   // Serve index.html for all webapp routes
   app.get('/webapp/*', (_req, res) => {
     res.sendFile(webappIndexPath, (err) => {

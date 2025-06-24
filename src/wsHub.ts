@@ -118,24 +118,21 @@ export function initWS(server: import('http').Server) {
     
     sessionClients.clients.add(ws);
     
-    // Send initial game state
-    ws.send(JSON.stringify({
-      type: 'init',
-      fen: sessionClients.game.fen(),
-      color: color
-    }));
-
-    // Send initial game state
+    // Load game state from database if available
     const gameSession = games.get(id);
     if (gameSession) {
-      ws.send(JSON.stringify({
-        type: 'update',
-        fen: gameSession.fen,
-        turn: sessionClients.game.turn(),
-        winner: sessionClients.game.isGameOver() ? 
-          (sessionClients.game.turn() === 'w' ? 'black' : 'white') : null
-      }));
+      // Sync in-memory chess with database FEN
+      sessionClients.game.load(gameSession.fen);
     }
+    
+    // >>> immediate position snapshot <<<
+    ws.send(JSON.stringify({
+      type: 'update',
+      fen: sessionClients.game.fen(),
+      turn: sessionClients.game.turn(),
+      winner: sessionClients.game.isGameOver() ? 
+        (sessionClients.game.turn() === 'w' ? 'black' : 'white') : null
+    }));
 
     ws.on('message', async raw => {
       const msg = JSON.parse(raw.toString());

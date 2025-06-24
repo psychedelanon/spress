@@ -56,7 +56,7 @@ function App() {
       console.log('WebSocket message:', msg);
       
       if (msg.type === 'init') {
-        const isGameOver = msg.winner !== null || msg.isDraw || false;
+        const isGameOver = !!msg.winner || !!msg.isDraw;
         setGameState({
           fen: msg.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           color,
@@ -72,7 +72,7 @@ function App() {
         });
       } else if (msg.type === 'update') {
         setGameState(prev => {
-          const isGameOver = msg.winner !== null || msg.isDraw || false;
+          const isGameOver = !!msg.winner || !!msg.isDraw;
           const winner = msg.winner;
           const isDraw = msg.isDraw || false;
           const isCheckmate = msg.isCheckmate || false;

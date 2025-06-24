@@ -149,6 +149,12 @@ export function initWS(server: import('http').Server) {
       const gameSession = games.get(id);
       if (!gameSession) return;
       
+      // Guard: prevent moves if game is already over
+      if (game.isGameOver()) {
+        console.log(`Move rejected: game ${id} is already over`);
+        return;
+      }
+      
       // Validate it's the correct player's turn
       const currentTurn = game.turn();
       const playerColor = (ws as any).playerColor;
@@ -284,7 +290,9 @@ export function initWS(server: import('http').Server) {
                 winner: aiGameOver ? (game.isDraw() ? null : (game.turn() === 'w' ? 'black' : 'white')) : null,
                 isDraw: aiGameOver && game.isDraw(),
                 isCheckmate: aiGameOver && game.isCheckmate(),
-                isInCheck: game.inCheck()
+                isInCheck: game.inCheck(),
+                captured: aiMoveResult.captured ? `${aiMoveResult.captured}` : null,
+                captureSquare: aiMoveResult.captured ? aiMoveResult.to : null
               };
               
               sessionClients!.clients.forEach(client => {
@@ -310,8 +318,9 @@ export function initWS(server: import('http').Server) {
                   games.delete(id);
                 }, 5000);
               } else {
-                // Send notification for human player's turn (no capture info for AI moves for now)
-                await sendTurnNotification(gameSession);
+                // Send notification for human player's turn (include AI capture info if any)
+                const aiCaptureInfo = aiMoveResult.captured ? `${aiMoveResult.captured}` : undefined;
+                await sendTurnNotification(gameSession, aiCaptureInfo);
               }
             } else {
               console.error('AI move failed:', aiMove);

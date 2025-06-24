@@ -16,8 +16,9 @@ const createPieceComponent = (pieceName: string) => {
       return null;
     }
     
-    // Add cache busting and retry logic - respect Vite base path and use SVG
-    const imageUrl = `${import.meta.env.BASE_URL}pieces/${pieceName}.svg?v=${Date.now()}&retry=${retryCount}`;
+    // Add cache busting only on retries - respect Vite base path and use SVG
+    const cacheBust = retryCount > 0 ? `?t=${Date.now()}&retry=${retryCount}` : '';
+    const imageUrl = `${import.meta.env.BASE_URL}pieces/${pieceName}.svg${cacheBust}`;
     
     return (
       <img 
@@ -139,7 +140,7 @@ export default function Board({ socket, color, initialFen }: Props) {
         setFen(msg.fen);
         setTurn(msg.fen.split(' ')[1] as 'w' | 'b');
         setIsInCheck(msg.isInCheck || false);
-        setIsGameOver(msg.winner !== null || msg.isDraw || false);
+        setIsGameOver(!!msg.winner || !!msg.isDraw);
         // Clear selection when game updates
         setSelectedSquare(null);
         

@@ -45,16 +45,26 @@ function CaptureToast({ message, onDismiss }: CaptureToastProps) {
 }
 
 export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveAttempt }: Props) {
-  const chessRef = useRef(new Chess(fen));
+  const chessRef = useRef(new Chess('start'));
   
-  // Keep chess.js in sync with props
+  // Track valid FEN to prevent passing bad FENs to Chessboard
+  const [validFen, setValidFen] = useState<string>('start');
+  
+  // Keep chess.js in sync with props and validate FEN
   useEffect(() => {
-    if (!fen || fen === '') return;  // still waiting for server
+    if (!fen || fen === '') {
+      setValidFen('start');
+      return;
+    }
+    
     try {
       chessRef.current.load(fen);
+      setValidFen(fen);  // Only update validFen if load succeeds
     } catch (err) {
       console.error('Bad FEN received:', fen, err);
-      return;  // don't re-throw – UI stays up
+      // Don't update validFen - keep the last known good position
+      // This prevents react-chessboard from receiving invalid FEN
+      return;
     }
   }, [fen]);
 
@@ -327,7 +337,7 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
     <div className="board-container">
       <Chessboard
         id="SPRESSBoard"
-        position={fen && fen !== '' ? fen : 'start'}
+        position={validFen}
         boardOrientation={color === 'w' ? 'white' : 'black'}
         onPieceDrop={onPieceDrop}
         onPieceDragBegin={onDragStart}

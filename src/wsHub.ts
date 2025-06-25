@@ -147,11 +147,21 @@ export function initWS(server: import('http').Server) {
 
       const { game } = sessionClients!;
       const gameSession = games.get(id);
-      if (!gameSession) return;
+      if (!gameSession) {
+        ws.send(JSON.stringify({ 
+          type: 'invalid', 
+          error: 'Game session not found'
+        }));
+        return;
+      }
       
       // Guard: prevent moves if game is already over
       if (game.isGameOver()) {
         console.log(`Move rejected: game ${id} is already over`);
+        ws.send(JSON.stringify({ 
+          type: 'invalid', 
+          error: 'Game is already over'
+        }));
         return;
       }
       
@@ -160,6 +170,10 @@ export function initWS(server: import('http').Server) {
       const playerColor = (ws as any).playerColor;
       if (currentTurn !== playerColor) {
         console.log(`Invalid move attempt: ${playerColor} tried to move on ${currentTurn}'s turn`);
+        ws.send(JSON.stringify({ 
+          type: 'invalid', 
+          error: 'Not your turn'
+        }));
         return;
       }
       
@@ -186,6 +200,11 @@ export function initWS(server: import('http').Server) {
         if (!move) throw new Error('Illegal move');
       } catch (error) {
         console.error('Move parsing error:', error);
+        // Send invalid move response to client
+        ws.send(JSON.stringify({ 
+          type: 'invalid', 
+          error: error instanceof Error ? error.message : 'Invalid move'
+        }));
         return;
       }
 

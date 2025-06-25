@@ -1,67 +1,23 @@
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { STABLE_PIECE_RENDERERS } from './pieceRenderers';
 
-type Props = { socket: WebSocket; color: 'w' | 'b'; initialFen: string };
+interface ClientMove {
+  from: string;
+  to: string;
+  promotion?: string;
+  captured?: string;
+  captureSquare?: string;
+}
 
-// Create custom pieces with error handling and cache busting
-const createPieceComponent = (pieceName: string) => {
-  return ({ squareWidth }: { squareWidth: number }) => {
-    const [error, setError] = useState(false);
-    const [retryCount, setRetryCount] = useState(0);
-    
-    if (error && retryCount > 1) {
-      // Fallback: return null to use default pieces after 2 retries
-      console.log(`Failed to load ${pieceName} after retries, using default`);
-      return null;
-    }
-    
-    // Add cache busting only on retries - respect Vite base path and use SVG
-    const cacheBust = retryCount > 0 ? `?t=${Date.now()}&retry=${retryCount}` : '';
-    const imageUrl = `${import.meta.env.BASE_URL}pieces/${pieceName}.svg${cacheBust}`;
-    
-    return (
-      <img 
-        src={imageUrl}
-        style={{ 
-          width: squareWidth, 
-          height: squareWidth,
-          transition: 'transform 0.15s ease-out'
-        }}
-        alt={`${pieceName.charAt(0) === 'w' ? 'White' : 'Black'} ${pieceName.charAt(1)}`}
-        onError={() => {
-          console.error(`Failed to load piece: ${pieceName}.svg (attempt ${retryCount + 1})`);
-          if (retryCount < 2) {
-            setRetryCount(prev => prev + 1);
-          } else {
-            setError(true);
-          }
-        }}
-        onLoad={() => {
-          console.log(`✅ Successfully loaded: ${pieceName}.svg`);
-          if (retryCount > 0) {
-            console.log(`✅ Loaded on retry ${retryCount}`);
-          }
-        }}
-      />
-    );
-  };
-};
-
-// Create custom pieces object with error handling
-const customPiecesObj = {
-  wK: createPieceComponent('wK'),
-  wQ: createPieceComponent('wQ'),
-  wR: createPieceComponent('wR'),
-  wB: createPieceComponent('wB'),
-  wN: createPieceComponent('wN'),
-  wP: createPieceComponent('wP'),
-  bK: createPieceComponent('bK'),
-  bQ: createPieceComponent('bQ'),
-  bR: createPieceComponent('bR'),
-  bB: createPieceComponent('bB'),
-  bN: createPieceComponent('bN'),
-  bP: createPieceComponent('bP')
+type Props = { 
+  fen: string;
+  turn: 'w' | 'b';
+  isGameOver: boolean;
+  isInCheck: boolean;
+  color: 'w' | 'b';
+  onMoveAttempt: (move: ClientMove) => void;
 };
 
 // Piece name mapping for capture messages
@@ -88,20 +44,35 @@ function CaptureToast({ message, onDismiss }: CaptureToastProps) {
   );
 }
 
-export default function Board({ socket, color, initialFen }: Props) {
-  const chessRef = useRef(new Chess(initialFen));
-  const [fen, setFen] = useState(initialFen);
-  const [turn, setTurn] = useState<'w' | 'b'>(initialFen.split(' ')[1] as 'w' | 'b');
-  const [isInCheck, setIsInCheck] = useState(false);
-  const [isGameOver, setIsGameOver] = useState(false);
+export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveAttempt }: Props) {
+  const chessRef = useRef(new Chess(fen));
+  
+  // Keep chess.js in sync with props
+  useEffect(() => {
+    if (!fen || fen === '') return;  // still waiting for server
+    try {
+      chessRef.current.load(fen);
+    } catch (err) {
+      console.error('Bad FEN received:', fen, err);
+      return;  // don't re-throw – UI stays up
+    }
+  }, [fen]);
+
+  // UI-only state (no game state)
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [captureFlashSquare, setCaptureFlashSquare] = useState<string | null>(null);
   const [captureToast, setCaptureToast] = useState<string | null>(null);
+  
+  // Mobile drag/tap conflict prevention
+  const isDragging = useRef(false);
+
+  // Use the stable piece renderers - this reference NEVER changes
+  const customPieces = STABLE_PIECE_RENDERERS;
 
   // Debug logging and piece testing
   useEffect(() => {
-    console.log('[DEBUG] customPieces created:', Object.keys(customPiecesObj));
-    console.log('[DEBUG] Sample piece function:', customPiecesObj.wK);
+    console.log('[DEBUG] customPieces created:', Object.keys(customPieces));
+    console.log('[DEBUG] Sample piece function:', customPieces.wK);
     
     // Test if piece files are accessible
     const testImg = new Image();
@@ -129,45 +100,25 @@ export default function Board({ socket, color, initialFen }: Props) {
         });
     };
     testImg.src = `${import.meta.env.BASE_URL}pieces/wK.svg`;
-  }, []);
+  }, []); // Empty dependency array since STABLE_PIECE_RENDERERS never changes
 
-  /* ───────────────────────────────────────────────────────── event listeners */
+  // Clear UI state when game updates (for server captures)
   useEffect(() => {
-    const handleMessage = (ev: MessageEvent) => {
-      const msg = JSON.parse(ev.data);
-      console.log('📨 [WEBSOCKET UPDATE]', msg);
-      
-      if (msg.type === 'update') {
-        console.log('🔄 [SERVER UPDATE]', { 
-          serverFen: msg.fen, 
-          currentFen: fen,
-          serverTurn: msg.fen.split(' ')[1],
-          currentTurn: turn
-        });
-
-        chessRef.current.load(msg.fen);
-        setFen(msg.fen);
-        setTurn(msg.fen.split(' ')[1] as 'w' | 'b');
-        setIsInCheck(msg.isInCheck || false);
-        setIsGameOver(!!msg.winner || !!msg.isDraw);
-        // Clear selection when game updates
-        setSelectedSquare(null);
-        
-        // Show capture flash if this was from a capture by opponent
-        if (msg.captured && msg.captureSquare) {
-          setCaptureFlashSquare(msg.captureSquare);
-          const capturedName = pieceNames[msg.captured.toLowerCase()] || 'Piece';
-          setCaptureToast(`💥 ${capturedName} captured!`);
-          setTimeout(() => setCaptureFlashSquare(null), 400);
-        }
-      }
-    };
-    
-    socket.addEventListener('message', handleMessage);
-    return () => socket.removeEventListener('message', handleMessage);
-  }, [socket]);
+    setSelectedSquare(null);
+  }, [fen]);
 
   /* ───────────────────────────────────────────────────────── drag handlers */
+  const onDragStart = useCallback(() => {
+    isDragging.current = true;
+  }, []);
+
+  const onDragEnd = useCallback(() => {
+    // Small delay to prevent tap events from firing immediately after drag
+    setTimeout(() => {
+      isDragging.current = false;
+    }, 50);
+  }, []);
+
   const onPieceDrop = useCallback(
     (sourceSquare: string, targetSquare: string) => {
       console.log('🎯 [MOVE ATTEMPT]', { sourceSquare, targetSquare, turn, color, isGameOver });
@@ -191,7 +142,7 @@ export default function Board({ socket, color, initialFen }: Props) {
 
       if (move == null) return false; // illegal
       
-      // Detect capture and create flash animation
+      // Handle capture flash UI only
       if (move.captured) {
         const capturedPieceName = pieceNames[move.captured.toLowerCase()] || 'Piece';
         const capturingColor = move.color === 'w' ? 'White' : 'Black';
@@ -204,31 +155,21 @@ export default function Board({ socket, color, initialFen }: Props) {
         setCaptureToast(`💥 ${capturingColor} captured a ${capturedPieceName}!`);
       }
 
-      // Update ALL state immediately after local move (fix race condition)
-      const newFen = chessRef.current.fen();
-      const newTurn = chessRef.current.turn();
-      const newCheck = chessRef.current.inCheck();
-      const newGameOver = chessRef.current.isGameOver();
-      
-      console.log('🔄 [LOCAL UPDATE]', { newFen, newTurn, newCheck, newGameOver });
-      
-      setFen(newFen);
-      setTurn(newTurn);
-      setIsInCheck(newCheck);
-      setIsGameOver(newGameOver);
-      setSelectedSquare(null); // Clear selection immediately
+      // Clear UI state only (no game state updates!)
+      setSelectedSquare(null);
 
-      // send UCI to backend with capture info
-      const moveData: any = { type: 'move', move: sourceSquare + targetSquare };
-      if (move.captured) {
-        moveData.captured = `${pieceNames[move.captured.toLowerCase()] || 'Piece'}`;
-        moveData.captureSquare = targetSquare;
-      }
+      // Send move to parent via callback
+      onMoveAttempt({
+        from: sourceSquare,
+        to: targetSquare,
+        promotion: 'q',
+        captured: move.captured ? pieceNames[move.captured.toLowerCase()] || 'Piece' : undefined,
+        captureSquare: move.captured ? targetSquare : undefined
+      });
       
-      socket.send(JSON.stringify(moveData));
       return true;
     },
-    [socket, turn, color, isGameOver],
+    [turn, color, isGameOver, onMoveAttempt],
   );
 
   /* ───────────────────────────────────────────────────────── square styles */
@@ -317,6 +258,8 @@ export default function Board({ socket, color, initialFen }: Props) {
 
   // Handle square clicks for mobile tap-to-select
   const onSquareClick = useCallback((square: string) => {
+    // Ignore taps when a drag just finished
+    if (isDragging.current) return;
 
     if (turn !== color || isGameOver) return;
     
@@ -336,7 +279,7 @@ export default function Board({ socket, color, initialFen }: Props) {
       });
 
       if (move != null) {
-        // Detect capture for mobile tap moves
+        // Handle capture flash UI only
         if (move.captured) {
           const capturedPieceName = pieceNames[move.captured.toLowerCase()] || 'Piece';
           const capturingColor = move.color === 'w' ? 'White' : 'Black';
@@ -349,22 +292,14 @@ export default function Board({ socket, color, initialFen }: Props) {
           setCaptureToast(`💥 ${capturingColor} captured a ${capturedPieceName}!`);
         }
 
-        // Update ALL state immediately after tap move (fix race condition)
-        const newFen = chessRef.current.fen();
-        setFen(newFen);
-        setTurn(chessRef.current.turn());
-        setIsInCheck(chessRef.current.inCheck());
-        setIsGameOver(chessRef.current.isGameOver());
-        
-        
-        // Send move with capture info
-        const moveData: any = { type: 'move', move: selectedSquare + square };
-        if (move.captured) {
-          moveData.captured = `${pieceNames[move.captured.toLowerCase()] || 'Piece'}`;
-          moveData.captureSquare = square;
-        }
-        
-        socket.send(JSON.stringify(moveData));
+        // Send move to parent via callback
+        onMoveAttempt({
+          from: selectedSquare,
+          to: square,
+          promotion: 'q',
+          captured: move.captured ? pieceNames[move.captured.toLowerCase()] || 'Piece' : undefined,
+          captureSquare: move.captured ? square : undefined
+        });
       }
       
       // Clear selection after move attempt
@@ -376,21 +311,23 @@ export default function Board({ socket, color, initialFen }: Props) {
       setSelectedSquare(null);
       setMoveSquares({});
     }
-  }, [turn, color, isGameOver, selectedSquare, moveSquares, highlightMoves, socket]);
+  }, [turn, color, isGameOver, selectedSquare, moveSquares, highlightMoves, onMoveAttempt]);
 
   /* ───────────────────────────────────────────────────────── render board */
   return (
     <div className="board-container">
       <Chessboard
         id="SPRESSBoard"
-        position={fen}
+        position={fen && fen !== '' ? fen : 'start'}
         boardOrientation={color === 'w' ? 'white' : 'black'}
         onPieceDrop={onPieceDrop}
+        onPieceDragBegin={onDragStart}
+        onPieceDragEnd={onDragEnd}
         onMouseOverSquare={onMouseOverSquare}
         onMouseOutSquare={onMouseOutSquare}
         onSquareClick={onSquareClick}
         customSquareStyles={getCustomSquareStyles()}
-        customPieces={customPiecesObj as any}
+        customPieces={customPieces as any}
         animationDuration={150}
         boardWidth={Math.min(window.innerWidth - 40, 480)}
         customDarkSquareStyle={{ backgroundColor: '#0053FF' }}   // SPRESS blue

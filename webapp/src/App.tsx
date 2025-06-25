@@ -1,6 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Board from './Board';
+import ErrorBoundary from './ErrorBoundary';
 import './App.css';
+
+interface ClientMove {
+  from: string;
+  to: string;
+  promotion?: string;
+  captured?: string;
+  captureSquare?: string;
+}
 
 function App() {
   const [socket, setSocket] = useState<WebSocket | null>(null);
@@ -11,10 +20,33 @@ function App() {
     turn: 'w' | 'b';
     status: string;
     isGameOver: boolean;
+    isInCheck: boolean;
     winner: string | null;
     isDraw: boolean;
     isCheckmate: boolean;
   } | null>(null);
+
+
+
+  // Move deduplication
+  const moveInFlight = useRef(false);
+
+  const sendMove = (move: ClientMove) => {
+    if (moveInFlight.current) return; // dedupe
+    
+    const moveData: any = { 
+      type: 'move', 
+      move: move.from + move.to 
+    };
+    
+    if (move.captured) {
+      moveData.captured = move.captured;
+      moveData.captureSquare = move.captureSquare;
+    }
+    
+    socket?.send(JSON.stringify(moveData));
+    moveInFlight.current = true;
+  };
 
   // Generate game outcome message
   const getGameOutcomeMessage = () => {
@@ -55,66 +87,53 @@ function App() {
       const msg = JSON.parse(event.data);
       console.log('WebSocket message:', msg);
       
-      if (msg.type === 'init') {
+      // 1️⃣ Any message that carries a fresh position should update state
+      const carriesFen = 
+        msg.type === 'update' ||
+        msg.type === 'session' ||      // first handshake for solo games
+        msg.type === 'fen' ||          // some back-ends label it like this
+        msg.type === 'init';           // previous naming
+
+      if (carriesFen) {
+        // Reset move deduplication flag
+        moveInFlight.current = false;
+
         const isGameOver = !!msg.winner || !!msg.isDraw;
+        const winner = msg.winner;
+        const isDraw = msg.isDraw || false;
+        const isCheckmate = msg.isCheckmate || false;
+        const isInCheck = msg.isInCheck || false;
+        
+        let status = 'Playing';
+        if (isGameOver) {
+          if (isDraw) {
+            status = 'Draw';
+          } else if (winner) {
+            status = `Game Over - ${winner} wins!`;
+          } else {
+            status = 'Game Over';
+          }
+        }
+
         setGameState({
-          fen: msg.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          fen: msg.fen || 'start',     // Default to 'start' if no FEN
           color,
           session,
-          turn: msg.fen?.split(' ')[1] || 'w',
-          status: isGameOver ? 
-            (msg.isDraw ? 'Draw' : `Game Over - ${msg.winner} wins!`) : 
-            'Playing',
+          turn: msg.turn || (msg.fen ? msg.fen.split(' ')[1] : 'w'),  // Derive from FEN if turn not provided
+          status,
           isGameOver,
-          winner: msg.winner,
-          isDraw: msg.isDraw || false,
-          isCheckmate: msg.isCheckmate || false
+          isInCheck,
+          winner,
+          isDraw,
+          isCheckmate
         });
-      } else if (msg.type === 'update') {
+        return;
+      }
 
-        setGameState(prev => {
-          const isGameOver = !!msg.winner || !!msg.isDraw;
-          const winner = msg.winner;
-          const isDraw = msg.isDraw || false;
-          const isCheckmate = msg.isCheckmate || false;
-          
-          let status = 'Playing';
-          if (isGameOver) {
-            if (isDraw) {
-              status = 'Draw';
-            } else if (winner) {
-              status = `Game Over - ${winner} wins!`;
-            } else {
-              status = 'Game Over';
-            }
-          }
-          
-          // Create initial game state if this is the first message
-          if (!prev) {
-            return {
-              fen: msg.fen,
-              color,
-              session,
-              turn: msg.turn,
-              status,
-              isGameOver,
-              winner,
-              isDraw,
-              isCheckmate
-            };
-          } else {
-            return {
-              ...prev,
-              fen: msg.fen,
-              turn: msg.turn,
-              status,
-              isGameOver,
-              winner,
-              isDraw,
-              isCheckmate
-            };
-          }
-        });
+      // 2️⃣ Messages that don't carry a position
+      if (msg.type === 'invalid' || msg.type === 'error') {
+        moveInFlight.current = false;
+        console.log('Invalid move or error:', msg);
       }
     };
 
@@ -171,11 +190,16 @@ function App() {
         </div>
         
         <div className={`board-wrapper ${gameState.isCheckmate ? 'checkmate' : ''}`}>
-          <Board 
-            socket={socket} 
-            color={gameState.color} 
-            initialFen={gameState.fen} 
-          />
+          <ErrorBoundary>
+            <Board 
+              fen={gameState.fen}
+              turn={gameState.turn}
+              isGameOver={gameState.isGameOver}
+              isInCheck={gameState.isInCheck}
+              color={gameState.color}
+              onMoveAttempt={sendMove}
+            />
+          </ErrorBoundary>
         </div>
       </div>
       

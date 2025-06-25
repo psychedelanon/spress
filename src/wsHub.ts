@@ -107,6 +107,20 @@ export function initWS(server: import('http').Server) {
     
     console.log(`Player connected to session ${id} as ${color}`);
     
+    // Check if this is a valid active session
+    const gameSession = games.get(id);
+    
+    // If no game session exists, this is likely a stale/expired session
+    if (!gameSession) {
+      console.log(`Rejecting connection to expired/invalid session: ${id}`);
+      ws.send(JSON.stringify({ 
+        type: 'session_expired', 
+        error: 'This game session has expired. Please start a new game.' 
+      }));
+      ws.close(4002, 'Session expired');
+      return;
+    }
+    
     // Get or create session clients
     let sessionClients = sessions.get(id);
     if (!sessionClients) {
@@ -119,11 +133,17 @@ export function initWS(server: import('http').Server) {
     
     sessionClients.clients.add(ws);
     
-    // Load game state from database if available
-    const gameSession = games.get(id);
-    if (gameSession) {
-      // Sync in-memory chess with database FEN
+    // Load game state from database (we know gameSession exists now)
+    try {
       sessionClients.game.load(gameSession.fen);
+    } catch (err) {
+      console.error(`Failed to load FEN for session ${id}:`, gameSession.fen, err);
+      ws.send(JSON.stringify({ 
+        type: 'session_corrupted', 
+        error: 'Game state corrupted. Please start a new game.' 
+      }));
+      ws.close(4003, 'Corrupted game state');
+      return;
     }
     
     // >>> immediate position snapshot <<<

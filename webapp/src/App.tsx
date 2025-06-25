@@ -135,6 +135,13 @@ function App() {
         moveInFlight.current = false;
         console.log('Invalid move or error:', msg);
       }
+      
+      // 3️⃣ Session expired/corrupted - show user-friendly message
+      if (msg.type === 'session_expired' || msg.type === 'session_corrupted') {
+        console.error('Session issue:', msg);
+        alert(msg.error + '\n\nPlease go back to Telegram and start a new game.');
+        return;
+      }
     };
 
     ws.addEventListener('message', handleMessage);

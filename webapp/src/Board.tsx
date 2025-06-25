@@ -134,15 +134,19 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
         return false;
       }
 
+      // Validate move locally but don't keep it on the board
       const move = chessRef.current.move({
         from: sourceSquare,
         to: targetSquare,
         promotion: 'q',
       });
 
-      if (move == null) return false; // illegal
+      if (move == null) return false; // illegal move - snap back
       
-      // Handle capture flash UI only
+      // Revert the move immediately (we only validated it)
+      chessRef.current.undo();
+      
+      // Handle capture flash UI only (based on the validated move)
       if (move.captured) {
         const capturedPieceName = pieceNames[move.captured.toLowerCase()] || 'Piece';
         const capturingColor = move.color === 'w' ? 'White' : 'Black';
@@ -167,7 +171,8 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
         captureSquare: move.captured ? targetSquare : undefined
       });
       
-      return true;
+      // Always return false - piece will snap back, server will update position later
+      return false;
     },
     [turn, color, isGameOver, onMoveAttempt],
   );
@@ -272,6 +277,7 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
     }
     // If a piece is selected and clicking on a highlighted square, make the move
     else if (selectedSquare && moveSquares[square]) {
+      // Validate move locally but don't keep it on the board
       const move = chessRef.current.move({
         from: selectedSquare,
         to: square,
@@ -279,7 +285,10 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
       });
 
       if (move != null) {
-        // Handle capture flash UI only
+        // Revert the move immediately (we only validated it)
+        chessRef.current.undo();
+        
+        // Handle capture flash UI only (based on the validated move)
         if (move.captured) {
           const capturedPieceName = pieceNames[move.captured.toLowerCase()] || 'Piece';
           const capturingColor = move.color === 'w' ? 'White' : 'Black';

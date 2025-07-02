@@ -5,6 +5,19 @@ import { ensureHttps } from '../utils/ensureHttps';
 import { insertGame, games, registerUser, getUser } from '../store/db';
 import { GameSession as NewGameSession, PlayerInfo } from '../types';
 
+// Pending PvP challenges waiting for acceptance
+interface PendingChallenge {
+  sessionId: string;
+  chatId: number;
+  challenger: PlayerInfo;
+  opponent: {
+    id?: number;
+    username: string;
+  };
+}
+
+const pendingChallenges = new Map<string, PendingChallenge>();
+
 // Helper function to generate session ID
 function generateSessionId(player1Id: number, player2Id: number): string {
   const sortedIds = [player1Id, player2Id].sort();
@@ -102,96 +115,37 @@ export async function handleNewGame(ctx: Context) {
   const userId = ctx.from!.id;
   const username = ctx.from!.username || 'Player';
   const chatId = ctx.chat.id;
-     const args = ('text' in ctx.message ? ctx.message.text : '').split(' ');
-  
+
+  const args = ('text' in ctx.message ? ctx.message.text : '').split(' ');
   if (args.length < 2 || !args[1].startsWith('@')) {
     return ctx.reply('Usage: /new @username\nExample: /new @alice');
   }
-  
-  const opponentUsername = args[1].substring(1); // Remove @
-  const sessionId = `pvp-${userId}-${Date.now()}`;
-  
-  // Register challenger for DM capability
+
+  const opponentUsername = args[1].substring(1);
+
+  // Determine opponent user ID if command was a reply
+  let opponentId: number | undefined;
+  if ('reply_to_message' in ctx.message && ctx.message.reply_to_message?.from) {
+    opponentId = ctx.message.reply_to_message.from.id;
+  }
+
   registerUser(userId, chatId, username);
 
-  // For demo purposes, we'll create a mock opponent
-  // In a real implementation, you'd need to resolve the username to a user ID
-  const mockOpponent = {
-    id: Math.floor(Math.random() * 1000000) + 1000000, // Random ID for demo
-    username: opponentUsername,
-    first_name: opponentUsername
-  };
+  const sessionId = generateSessionId(userId, opponentId || Date.now());
 
-  // Create new game session with proper structure
-  const gameSession: NewGameSession = {
-    id: sessionId,
-    chatId,
-    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-    mode: 'pvp',
-    lastMoveAt: Date.now(),
-    pgn: '',
-    players: {
-      w: {
-        id: userId,
-        username,
-        dmChatId: chatId,
-        color: 'w'
-      },
-      b: {
-        id: mockOpponent.id,
-        username: mockOpponent.username,
-        color: 'b'
-        // dmChatId will be filled when opponent first talks to bot
-      }
-    }
-  };
-  
-  games.set(sessionId, gameSession);
-
-  // Persist to database
-  insertGame.run(
+  pendingChallenges.set(sessionId, {
     sessionId,
-    gameSession.fen,
-    gameSession.pgn || '',
-    'w', // White always starts
-    userId,
-    mockOpponent.id,
-    'pvp',
-    chatId
-  );
-
-  const colorInfo = 'You are White ⚪';
-  const gameInfo = `
-🆕 New game started!
-${colorInfo}
-Opponent: @${opponentUsername}
-
-White to move
-
-Use the Mini App for the best experience!
-  `.trim();
-
-  await ctx.reply(gameInfo, {
-    reply_markup: createGameKeyboard(sessionId, 'w'),
-    parse_mode: 'HTML'
+    chatId,
+    challenger: { id: userId, username, dmChatId: chatId, color: 'w' },
+    opponent: { id: opponentId, username: opponentUsername }
   });
 
-  // Send launch buttons for each player
-  const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
-  const whiteUrl = `${base}/webapp/?session=${sessionId}&color=w`;
-  const blackUrl = `${base}/webapp/?session=${sessionId}&color=b`;
-
-  // Send to challenger (always White)
-  await ctx.reply('Launch SPRESS board', {
+  await ctx.reply(`@${opponentUsername}, you have been challenged to a game!`, {
     reply_markup: {
-      inline_keyboard: [[{ 
-        text: '♟️ Play (White)', 
-        web_app: { url: whiteUrl } 
-      }]]
-    }
+      inline_keyboard: [[{ text: 'Accept challenge', callback_data: `accept_${sessionId}` }]]
+    },
+    parse_mode: 'Markdown'
   });
-
-  // Note: In a real implementation, you'd send the other button to the actual opponent
 }
 
 // Handle text messages - block chess moves, redirect to board
@@ -248,12 +202,12 @@ export function handleResign(ctx: Context) {
 }
 
 // Handle callback queries (inline button presses)
-export function handleCallbackQuery(ctx: Context) {
+export async function handleCallbackQuery(ctx: Context) {
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery || !('data' in callbackQuery)) return;
 
   const data = callbackQuery.data;
-  
+
   if (data.startsWith('show_board_')) {
     const sessionId = data.replace('show_board_', '');
     const game = games.get(sessionId);
@@ -297,7 +251,81 @@ Current Position:
   } else if (data.startsWith('resign_')) {
     handleResign(ctx);
     ctx.answerCbQuery();
-    
+
+  } else if (data.startsWith('accept_')) {
+    const sessionId = data.replace('accept_', '');
+    const challenge = pendingChallenges.get(sessionId);
+    if (!challenge) {
+      ctx.answerCbQuery('Challenge not found');
+      return;
+    }
+
+    if (!ctx.from) return;
+
+    // Verify correct opponent (if username known)
+    if (challenge.opponent.id && challenge.opponent.id !== ctx.from.id) {
+      ctx.answerCbQuery('This challenge is not for you');
+      return;
+    }
+
+    challenge.opponent.id = ctx.from.id;
+    challenge.opponent.username = ctx.from.username || challenge.opponent.username;
+
+    registerUser(ctx.from.id, ctx.chat?.id || challenge.chatId, ctx.from.username);
+
+    const gameSession: NewGameSession = {
+      id: sessionId,
+      chatId: challenge.chatId,
+      fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      mode: 'pvp',
+      lastMoveAt: Date.now(),
+      pgn: '',
+      players: {
+        w: challenge.challenger,
+        b: {
+          id: challenge.opponent.id!,
+          username: challenge.opponent.username,
+          dmChatId: ctx.chat?.id,
+          color: 'b'
+        }
+      }
+    };
+
+    games.set(sessionId, gameSession);
+    insertGame.run(sessionId, gameSession.fen, gameSession.pgn || '', 'w', challenge.challenger.id, challenge.opponent.id!, 'pvp', challenge.chatId);
+
+    pendingChallenges.delete(sessionId);
+
+    const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
+    const whiteUrl = `${base}/webapp/?session=${sessionId}&color=w`;
+    const blackUrl = `${base}/webapp/?session=${sessionId}&color=b`;
+
+    await ctx.editMessageText?.('Challenge accepted! Game starting...').catch(() => {});
+    await ctx.telegram.sendMessage(challenge.chatId,
+      `Game started between @${challenge.challenger.username} (White) and @${challenge.opponent.username} (Black). White to move`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '♟️ Play (White)', web_app: { url: whiteUrl } },
+              { text: '♟️ Play (Black)', web_app: { url: blackUrl } }
+            ],
+            [
+              { text: '📋 Show Board', callback_data: `show_board_${sessionId}` },
+              { text: '📜 Show Moves', callback_data: `show_moves_${sessionId}` }
+            ],
+            [
+              { text: '🏳️ Resign', callback_data: `resign_${sessionId}` }
+            ],
+            [
+              { text: 'ℹ️ How to Play', callback_data: `help_${sessionId}` }
+            ]
+          ]
+        }
+      }
+    );
+    ctx.answerCbQuery('Challenge accepted');
+
   } else if (data.startsWith('help_')) {
     ctx.answerCbQuery();
     ctx.reply(

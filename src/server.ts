@@ -6,8 +6,10 @@ import path from 'node:path';
 import { initWS, setBotInstance } from './wsHub';
 import { registerUser } from './store/db';
 import { games, loadGames } from './store/games';
-import { loadStats, saveStatsPeriodically, saveStats } from './store/stats';
+import { loadStats, saveStatsPeriodically, saveStats, getAllStats } from './store/stats';
 import pino from 'pino';
+import rateLimit from 'telegraf-ratelimit';
+import cron from 'node-cron';
 import * as Sentry from '@sentry/node';
 import './store/db'; // Initialize user registry
 
@@ -25,6 +27,10 @@ Sentry.init({ dsn: process.env.SENTRY_DSN || '' });
 loadStats();
 loadGames();
 saveStatsPeriodically();
+cron.schedule('0 3 * * *', () => {
+  const { purgeFinished } = require('./store/games');
+  purgeFinished(30);
+});
 
 // Initialize Telegram bot
 logger.info('🔧 Initializing bot...');
@@ -122,6 +128,7 @@ import { handleNewGame, handleSoloGame, handleMove, handleResign, handleCallback
 
 // Set up bot commands
 if (bot) {
+  bot.use(rateLimit({ window: 10000, limit: 5 }));
   bot.start((ctx) => {
     // Register user for DM capability
     if (ctx.from && ctx.chat) {

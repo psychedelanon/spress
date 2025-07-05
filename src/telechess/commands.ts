@@ -3,6 +3,7 @@ import { InlineKeyboardMarkup } from 'telegraf/types';
 import { GameSession, Player } from './GameSession';
 import { ensureHttps } from '../utils/ensureHttps';
 import { boardTextFromFEN } from '../utils/boardText';
+import { fenToPng } from '../render/boardImage';
 import { registerUser, getUser } from '../store/db';
 import { insertGame, games, deleteGame } from '../store/games';
 import { GameSession as NewGameSession, PlayerInfo } from '../types';
@@ -22,6 +23,9 @@ interface PendingChallenge {
 }
 
 const pendingChallenges = new Map<string, PendingChallenge>();
+
+let lastFen = '';
+let lastPng: Buffer = Buffer.alloc(0);
 
 function expireChallenge(id: string) {
   const c = pendingChallenges.get(id);
@@ -241,6 +245,38 @@ export function handleResign(ctx: Context) {
   ctx.reply(`🏳️ You resigned as ${playerColor}. ${winner} wins!`);
 }
 
+function getLastGameId(userId: number): string | undefined {
+  const list = Array.from(games.values())
+    .filter(g => g.players.w.id === userId || g.players.b.id === userId)
+    .sort((a, b) => b.lastMoveAt - a.lastMoveAt);
+  return list[0]?.id;
+}
+
+export async function handlePgn(ctx: Context) {
+  if (!ctx.from) return;
+  const parts = ('text' in ctx.message ? ctx.message.text.split(' ') : []);
+  const arg = parts[1];
+  const id = arg || getLastGameId(ctx.from.id);
+  if (!id) return ctx.reply('Game not found.');
+  const game = games.get(id);
+  if (!game || !game.pgn) return ctx.reply('Game not found.');
+  await ctx.replyWithDocument(
+    { filename: `chess-${id}.pgn`, source: Buffer.from(game.pgn) },
+    { caption: 'Here is your PGN.' }
+  );
+}
+
+export async function handleHistory(ctx: Context) {
+  if (!ctx.from) return;
+  const finished = Array.from(games.values())
+    .filter(g => g.winner && (g.players.w.id === ctx.from!.id || g.players.b.id === ctx.from!.id))
+    .sort((a, b) => b.lastMoveAt - a.lastMoveAt)
+    .slice(0, 5);
+  if (!finished.length) return ctx.reply('No recent games');
+  const buttons = finished.map(g => [{ text: `PGN ${g.id}`, callback_data: `pgn_${g.id}` }]);
+  await ctx.reply('Recent games:', { reply_markup: { inline_keyboard: buttons } });
+}
+
 // Handle callback queries (inline button presses)
 export async function handleCallbackQuery(ctx: Context) {
   const callbackQuery = ctx.callbackQuery;
@@ -251,16 +287,19 @@ export async function handleCallbackQuery(ctx: Context) {
   if (data.startsWith('show_board_')) {
     const sessionId = data.replace('show_board_', '');
     const game = games.get(sessionId);
-    
+
     if (!game) {
       ctx.answerCbQuery('Game not found');
       return;
     }
-    
-    const boardText = `Current Position:\n${boardTextFromFEN(game.fen)}`;
 
     ctx.answerCbQuery();
-    ctx.reply(boardText, { parse_mode: 'Markdown' });
+    const fen = game.fen;
+    if (lastFen !== fen) {
+      lastPng = await fenToPng(fen);
+      lastFen = fen;
+    }
+    await ctx.replyWithPhoto({ source: lastPng }, { caption: `Turn: ${game.fen.split(' ')[1] === 'w' ? 'White' : 'Black'}` });
     
   } else if (data.startsWith('show_moves_')) {
     const sessionId = data.replace('show_moves_', '');
@@ -274,6 +313,16 @@ export async function handleCallbackQuery(ctx: Context) {
     const moves = game.pgn || 'No moves yet';
     ctx.answerCbQuery();
     ctx.reply(`📜 Game moves:\n\`${moves}\``, { parse_mode: 'Markdown' });
+
+  } else if (data.startsWith('pgn_')) {
+    const id = data.replace('pgn_', '');
+    const game = games.get(id);
+    if (!game || !game.pgn) {
+      ctx.answerCbQuery('Game not found');
+      return;
+    }
+    ctx.answerCbQuery();
+    await ctx.replyWithDocument({ filename: `chess-${id}.pgn`, source: Buffer.from(game.pgn) });
     
   } else if (data.startsWith('resign_')) {
     handleResign(ctx);
@@ -400,14 +449,14 @@ export function handleLeaderboard(ctx: Context) {
   const statsMod = require('../store/stats') as typeof import('../store/stats');
   const all = Object.entries(statsMod.getAllStats());
   const top = all
-    .map(([id, s]) => ({ id: Number(id), wins: s.pvpWins }))
-    .sort((a, b) => b.wins - a.wins)
+    .map(([id, s]) => ({ id: Number(id), rating: s.rating }))
+    .sort((a, b) => b.rating - a.rating)
     .slice(0, 10);
   if (top.length === 0) return ctx.reply('No games played yet');
   const lines = top.map((e, i) => {
     const user = getUser(e.id);
     const name = user?.username ? '@' + user.username : e.id.toString();
-    return `${String(i + 1).padStart(2, ' ')}. ${name.padEnd(10)} ${e.wins}`;
+    return `${String(i + 1).padStart(2, ' ')}. ${name.padEnd(10)} ${e.rating}`;
   });
   ctx.reply(`🏆 Leaderboard\n<pre>${lines.join('\n')}</pre>`, { parse_mode: 'HTML' });
 }

@@ -4,24 +4,43 @@ import dotenv from 'dotenv';
 import http from 'http';
 import path from 'node:path';
 import { initWS, setBotInstance } from './wsHub';
-import { registerUser, games } from './store/db';
-import './store/db'; // Initialize database
+import { registerUser } from './store/db';
+import { games, loadGames } from './store/games';
+import { loadStats, saveStatsPeriodically, saveStats, getAllStats } from './store/stats';
+import pino from 'pino';
+import rateLimit from 'telegraf-ratelimit';
+import cron from 'node-cron';
+import * as Sentry from '@sentry/node';
+import './store/db'; // Initialize user registry
 
+dotenv.config();
+
+const logger = pino();
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 
+Sentry.init({ dsn: process.env.SENTRY_DSN || '' });
+
+loadStats();
+loadGames();
+saveStatsPeriodically();
+cron.schedule('0 3 * * *', () => {
+  const { purgeFinished } = require('./store/games');
+  purgeFinished(30);
+});
+
 // Initialize Telegram bot
-console.log('🔧 Initializing bot...');
+logger.info('🔧 Initializing bot...');
 let bot: Telegraf | null = null;
 if (!process.env.TELE_TOKEN) {
-  console.warn('⚠️ TELE_TOKEN not set - bot will not work until configured');
-  console.log('🔧 Server starting without bot functionality...');
+  logger.warn('⚠️ TELE_TOKEN not set - bot will not work until configured');
+  logger.info('🔧 Server starting without bot functionality...');
 } else {
   bot = new Telegraf(process.env.TELE_TOKEN);
-  console.log('✅ Bot instance created');
+  logger.info('✅ Bot instance created');
 }
 
 // Initialize WebSocket server for real-time board updates
@@ -41,9 +60,8 @@ if (process.env.NODE_ENV === 'production') {
   const webappDistPath = path.join(__dirname, '../webapp/dist');
   const webappIndexPath = path.join(webappDistPath, 'index.html');
   
-  console.log('🌐 Setting up webapp static files...');
-  console.log('   Dist path:', webappDistPath);
-  console.log('   Index path:', webappIndexPath);
+  logger.info('🌐 Setting up webapp static files...');
+  logger.info({ webappDistPath, webappIndexPath }, 'paths');
   
   // Serve static files
   app.use('/webapp', express.static(webappDistPath, { maxAge: '1h' }));
@@ -55,7 +73,7 @@ if (process.env.NODE_ENV === 'production') {
   app.get('/webapp/*', (_req, res) => {
     res.sendFile(webappIndexPath, (err) => {
       if (err) {
-        console.error('Failed to serve webapp index.html:', err);
+        logger.error({ err }, 'Failed to serve webapp index.html');
         res.status(500).send(`
           <!DOCTYPE html>
           <html>
@@ -106,15 +124,16 @@ app.get('/health', (req, res) => {
 });
 
 // Import command handlers
-import { handleNewGame, handleSoloGame, handleMove, handleResign, handleCallbackQuery } from './telechess/commands';
+import { handleNewGame, handleSoloGame, handleMove, handleResign, handleCallbackQuery, handleStats, handleLeaderboard } from './telechess/commands';
 
 // Set up bot commands
 if (bot) {
+  bot.use(rateLimit({ window: 10000, limit: 5 }));
   bot.start((ctx) => {
     // Register user for DM capability
     if (ctx.from && ctx.chat) {
       registerUser(ctx.from.id, ctx.chat.id, ctx.from.username);
-      console.log(`User ${ctx.from.id} (${ctx.from.username || 'unnamed'}) registered for DMs`);
+      logger.info(`User ${ctx.from.id} (${ctx.from.username || 'unnamed'}) registered for DMs`);
     }
     ctx.reply('Welcome to SPRESS Chess! ♟️\nSend /new @opponent to start a game or /solo to play against AI.');
   });
@@ -125,6 +144,7 @@ if (bot) {
       '/new @opponent - Start a new game\n' +
       '/solo - Play vs AI\n' +
       '/resign - Resign current game\n' +
+      '/stats - Show your stats\n' +
       'Use the interactive board to make moves\n' +
       'Click "♟️ Launch SPRESS Board" to play'
     );
@@ -134,6 +154,8 @@ if (bot) {
   bot.command('new', handleNewGame);
 bot.command('solo', handleSoloGame);
 bot.command('resign', handleResign);
+bot.command('stats', handleStats);
+bot.command('leaderboard', handleLeaderboard);
 
 // Reset command for testing (admin only)
 bot.command('reset', (ctx) => {
@@ -144,69 +166,79 @@ bot.command('reset', (ctx) => {
   
   games.clear();
   ctx.reply('💥 All games cleared.');
-  console.log(`Admin ${ctx.from!.username} cleared all games`);
+  logger.info(`Admin ${ctx.from!.username} cleared all games`);
 });
   bot.on('callback_query', handleCallbackQuery);
   bot.on('text', handleMove);
 
+  bot.on('my_chat_member', ctx => {
+    if (ctx.myChatMember.new_chat_member?.status === 'member')
+      ctx.telegram.sendMessage(ctx.chat.id, '🙋‍♂️  Hi!  /new @opponent to start a chess match.  /help for full guide.');
+  });
+
   // Register users on any interaction
   bot.use(async (ctx, next) => {
+    const started = Date.now();
     if (ctx.from && ctx.chat) {
       registerUser(ctx.from.id, ctx.chat.id, ctx.from.username);
     }
-    return next();
+    await next();
+    const ms = Date.now() - started;
+    logger.info({ type: ctx.updateType, ms }, 'update');
   });
 
   // Error handling
   bot.catch((err, ctx) => {
-    console.error('Bot error', err);
+    logger.error({ err }, 'Bot error');
     ctx.reply('⚠️ Something went wrong. Please try again.').catch(() => {});
   });
 }
 
 // Start server
 server.listen(port, () => {
-  console.log(`🚀 Server running on port ${port}`);
+  logger.info(`🚀 Server running on port ${port}`);
   
   // In production (Railway), use webhooks; in development, use polling
   if (bot) {
     if (process.env.NODE_ENV === 'production') {
-      console.log('🔗 Production mode - bot will use webhooks');
+      logger.info('🔗 Production mode - bot will use webhooks');
       
       // Automatically set webhook URL
       const webhookUrl = `${process.env.PUBLIC_URL || 'https://spress-production.up.railway.app'}/bot`;
-      console.log(`🔗 Setting webhook to: ${webhookUrl}`);
+      logger.info(`🔗 Setting webhook to: ${webhookUrl}`);
       
       bot.telegram.setWebhook(webhookUrl)
-        .then(() => console.log('✅ Webhook set successfully'))
-        .catch(err => console.error('❌ Failed to set webhook:', err));
+        .then(() => logger.info('✅ Webhook set successfully'))
+        .catch(err => logger.error({ err }, '❌ Failed to set webhook'));
     } else {
-      console.log('🔄 Development mode - using polling');
+      logger.info('🔄 Development mode - using polling');
       bot.launch()
-        .then(() => console.log('🤖 Bot launched in polling mode'))
-        .catch(err => console.error('❌ Failed to launch bot:', err));
+        .then(() => logger.info('🤖 Bot launched in polling mode'))
+        .catch(err => logger.error({ err }, '❌ Failed to launch bot'));
     }
   } else {
-    console.log('🚫 Bot not initialized - skipping bot setup');
+    logger.warn('🚫 Bot not initialized - skipping bot setup');
   }
 });
 
 // Graceful shutdown
 process.once('SIGINT', () => {
-  console.log('Received SIGINT, shutting down gracefully');
+  logger.info('Received SIGINT, shutting down gracefully');
   if (bot && process.env.NODE_ENV !== 'production') {
     bot.stop('SIGINT');
   }
+  saveStats();
   server.close(() => {
     process.exit(0);
   });
 });
 
 process.once('SIGTERM', () => {
-  console.log('Received SIGTERM, shutting down gracefully');
+  logger.info('Received SIGTERM, shutting down gracefully');
   if (bot && process.env.NODE_ENV !== 'production') {
     bot.stop('SIGTERM');
   }
+  saveStats();
   server.close(() => {
     process.exit(0);
   });

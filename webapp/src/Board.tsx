@@ -62,6 +62,131 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
   // UI state for delightful effects
   const [captureFlashSquare, setCaptureFlashSquare] = useState<string | null>(null);
   const [captureToast, setCaptureToast] = useState<string | null>(null);
+  
+  // Mobile drag/tap conflict prevention
+  const isDragging = useRef(false);
+
+  // Only allow dragging of our own pieces
+  const isDraggablePiece = useCallback(
+    ({ piece }: { piece: string; sourceSquare: string }) => {
+      if (turn !== color || isGameOver) return false;
+      return piece[0] === color;
+    },
+    [turn, color, isGameOver]
+  );
+
+  // Use the stable piece renderers - this reference NEVER changes
+  const customPieces = STABLE_PIECE_RENDERERS;
+
+  // Debug logging and piece testing
+  useEffect(() => {
+    console.log('[DEBUG] customPieces created:', Object.keys(customPieces));
+    console.log('[DEBUG] Sample piece function:', customPieces.wK);
+    
+    // Test if piece files are accessible
+    const testImg = new Image();
+    testImg.onload = () => {
+      console.log('[DEBUG] ✅ wK.svg loaded successfully');
+      console.log('[DEBUG] Image dimensions:', testImg.width, 'x', testImg.height);
+    };
+    testImg.onerror = (error) => {
+      console.log('[DEBUG] ❌ wK.svg failed to load - check file path');
+      console.error('[DEBUG] Error details:', error);
+      
+      // Try fetching directly to get more info
+      fetch(`${import.meta.env.BASE_URL}pieces/wK.svg`)
+        .then(response => {
+          console.log('[DEBUG] Fetch response status:', response.status);
+          console.log('[DEBUG] Content-Type:', response.headers.get('content-type'));
+          return response.text();
+        })
+        .then(svgText => {
+          console.log('[DEBUG] SVG content length:', svgText.length);
+          console.log('[DEBUG] SVG starts with:', svgText.substring(0, 100));
+        })
+        .catch(fetchError => {
+          console.error('[DEBUG] Fetch error:', fetchError);
+        });
+    };
+    testImg.src = `${import.meta.env.BASE_URL}pieces/wK.svg`;
+  }, []); // Empty dependency array since STABLE_PIECE_RENDERERS never changes
+
+  // Clear UI state when game updates (for server captures)
+  useEffect(() => {
+    setSelectedSquare(null);
+  }, [fen]);
+
+  /* ───────────────────────────────────────────────────────── drag handlers */
+  const onDragStart = useCallback(() => {
+    isDragging.current = true;
+  }, []);
+
+  const onDragEnd = useCallback(() => {
+    // Small delay to prevent tap events from firing immediately after drag
+    setTimeout(() => {
+      isDragging.current = false;
+    }, 50);
+  }, []);
+
+  const onPieceDrop = useCallback(
+    (sourceSquare: string, targetSquare: string) => {
+      console.log('🎯 [MOVE ATTEMPT]', { sourceSquare, targetSquare, turn, color, isGameOver });
+      
+      // Don't allow moves if game is over
+      if (isGameOver) {
+        console.log('❌ Move blocked: game over');
+        return false;
+      }
+      // only allow if it's my move
+      if (turn !== color) {
+        console.log('❌ Move blocked: wrong turn', { turn, color });
+        return false;
+      }
+
+      // Validate move locally but don't keep it on the board
+      const move = chessRef.current.move({
+        from: sourceSquare,
+        to: targetSquare,
+        promotion: 'q',
+      });
+
+      if (move == null) return false; // illegal move - snap back
+      
+      // Revert the move immediately (we only validated it)
+      chessRef.current.undo();
+      
+      // Handle capture flash UI only (based on the validated move)
+      if (move.captured) {
+        const capturedPieceName = pieceNames[move.captured.toLowerCase()] || 'Piece';
+        const capturingColor = move.color === 'w' ? 'White' : 'Black';
+        
+        // Flash the destination square
+        setCaptureFlashSquare(targetSquare);
+        setTimeout(() => setCaptureFlashSquare(null), 400);
+        
+        // Show capture toast
+        setCaptureToast(`💥 ${capturingColor} captured a ${capturedPieceName}!`);
+      }
+
+      // Clear UI state only (no game state updates!)
+      setSelectedSquare(null);
+
+      // Send move to parent via callback
+      onMoveAttempt({
+        from: sourceSquare,
+        to: targetSquare,
+        promotion: 'q',
+        captured: move.captured ? pieceNames[move.captured.toLowerCase()] || 'Piece' : undefined,
+        captureSquare: move.captured ? targetSquare : undefined
+      });
+      
+      // Let piece stay on target square; board will update when server confirms
+      return true;
+    },
+    [turn, color, isGameOver, onMoveAttempt],
+  );
+
+  /* ───────────────────────────────────────────────────────── square styles */
   const [moveSquares, setMoveSquares] = useState<Record<string, React.CSSProperties>>({});
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
 
@@ -70,51 +195,6 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
     'p': 'Pawn', 'r': 'Rook', 'n': 'Knight', 
     'b': 'Bishop', 'q': 'Queen', 'k': 'King'
   };
-
-  const onPieceDrop = useCallback((sourceSquare: string, targetSquare: string) => {
-    console.log('🎯 Move attempt:', sourceSquare, '->', targetSquare);
-    
-    if (isGameOver || turn !== color) {
-      console.log('🎯 Move blocked');
-      return false;
-    }
-
-    // Validate move using chess.js for proper feedback
-    const move = chessRef.current.move({
-      from: sourceSquare,
-      to: targetSquare,
-      promotion: 'q'
-    });
-
-    if (!move) {
-      console.log('🎯 Illegal move');
-      return false; // Illegal move
-    }
-
-    // Undo the move (we just validated it)
-    chessRef.current.undo();
-
-    // Add capture flash effect if it was a capture
-    if (move.captured) {
-      setCaptureFlashSquare(targetSquare);
-      setTimeout(() => setCaptureFlashSquare(null), 400);
-      setCaptureToast(`💥 ${color === 'w' ? 'White' : 'Black'} captured a ${pieceNames[move.captured.toLowerCase()] || 'piece'}!`);
-    }
-
-    // Clear selection
-    setSelectedSquare(null);
-    setMoveSquares({});
-
-    // Send move to server
-    onMoveAttempt({
-      from: sourceSquare,
-      to: targetSquare,
-      promotion: 'q'
-    });
-    
-    // Always snap back - server will update
-    return false;
-  }, [turn, color, isGameOver, onMoveAttempt, pieceNames]);
 
   // Show legal moves for a square - works for ANY piece to show what's possible
   const highlightLegalMoves = useCallback((square: string) => {
@@ -300,6 +380,7 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
           boxShadow: '0 4px 20px rgba(224, 19, 19, 0.3)'
         }}
         arePiecesDraggable={turn === color && !isGameOver}
+        isDraggablePiece={isDraggablePiece}
       />
       
       {/* Capture Toast */}

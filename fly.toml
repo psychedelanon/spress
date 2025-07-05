@@ -1,0 +1,7 @@
+[env]
+BOT_TOKEN = "REPLACE"
+DATABASE_URL = "/data/chess.sqlite"
+
+[[mounts]]
+source="db"
+destination="/data"

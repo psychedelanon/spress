@@ -76,6 +76,15 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
   // Mobile drag/tap conflict prevention
   const isDragging = useRef(false);
 
+  // Only allow dragging of our own pieces
+  const isDraggablePiece = useCallback(
+    ({ piece }: { piece: string; sourceSquare: string }) => {
+      if (turn !== color || isGameOver) return false;
+      return piece[0] === color;
+    },
+    [turn, color, isGameOver]
+  );
+
   // Use the stable piece renderers - this reference NEVER changes
   const customPieces = STABLE_PIECE_RENDERERS;
 
@@ -181,8 +190,8 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
         captureSquare: move.captured ? targetSquare : undefined
       });
       
-      // Always return false - piece will snap back, server will update position later
-      return false;
+      // Let piece stay on target square; board will update when server confirms
+      return true;
     },
     [turn, color, isGameOver, onMoveAttempt],
   );
@@ -357,6 +366,7 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
           transition: 'transform 0.15s ease-out'
         }}
         arePiecesDraggable={turn === color && !isGameOver}
+        isDraggablePiece={isDraggablePiece}
       />
       
       {/* Capture Toast */}

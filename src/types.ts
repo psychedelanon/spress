@@ -15,6 +15,7 @@ export interface GameSession {
   lastMoveAt: number;
   pgn?: string;
   winner?: string;
+  aiLevel?: number;
 }
 
 // User registry for tracking DM chat IDs

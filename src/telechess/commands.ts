@@ -3,7 +3,8 @@ import { InlineKeyboardMarkup } from 'telegraf/types';
 import { GameSession, Player } from './GameSession';
 import { ensureHttps } from '../utils/ensureHttps';
 import { boardTextFromFEN } from '../utils/boardText';
-import { insertGame, games, registerUser, getUser } from '../store/db';
+import { registerUser, getUser } from '../store/db';
+import { insertGame, games, deleteGame } from '../store/games';
 import { GameSession as NewGameSession, PlayerInfo } from '../types';
 import { getStats, recordResult } from '../store/stats';
 
@@ -16,9 +17,18 @@ interface PendingChallenge {
     id?: number;
     username: string;
   };
+  messageId: number;
+  telegram: Context['telegram'];
 }
 
 const pendingChallenges = new Map<string, PendingChallenge>();
+
+function expireChallenge(id: string) {
+  const c = pendingChallenges.get(id);
+  if (!c) return;
+  c.telegram.editMessageText(c.chatId, c.messageId, undefined, 'Challenge timed out.').catch(() => {});
+  pendingChallenges.delete(id);
+}
 
 // Helper function to generate session ID
 function generateSessionId(player1Id: number, player2Id: number): string {
@@ -55,6 +65,35 @@ export async function handleSoloGame(ctx: Context) {
   const userId = ctx.from!.id;
   const username = ctx.from!.username || 'Player';
   const chatId = ctx.chat.id;
+
+  if (Array.from(games.values()).some(g => !g.winner && g.chatId === chatId && (g.players.w.id === userId || g.players.b.id === userId))) {
+    return ctx.reply('Finish or /resign your current game first.');
+  }
+
+  if (Array.from(games.values()).some(g => !g.winner && g.chatId === chatId && (g.players.w.id === userId || g.players.b.id === userId))) {
+    return ctx.reply('Finish or /resign your current game first.');
+  }
+
+  const parts = ('text' in ctx.message ? ctx.message.text.split(' ') : []);
+  const arg = parts[1];
+  let level: number | null = null;
+  if (arg) {
+    const a = arg.toLowerCase();
+    if (a === 'easy') level = 2;
+    else if (a === 'medium' || a === 'med') level = 10;
+    else if (a === 'hard') level = 15;
+    else if (/^\d+$/.test(a)) level = Math.min(20, Math.max(0, parseInt(a,10)));
+  }
+
+  if (level === null) {
+    return ctx.reply('Pick AI difficulty', {
+      reply_markup: { inline_keyboard: [[
+        { text: 'Easy', callback_data: 'solo_easy' },
+        { text: 'Med', callback_data: 'solo_med' },
+        { text: 'Hard', callback_data: 'solo_hard' }
+      ]] }
+    });
+  }
   
   // Register user for DM capability
   registerUser(userId, chatId, username);
@@ -84,20 +123,12 @@ export async function handleSoloGame(ctx: Context) {
       }
     }
   };
+  gameSession.aiLevel = level;
   
   games.set(sessionId, gameSession);
 
   // Persist to database
-  insertGame.run(
-    sessionId,
-    gameSession.fen,
-    gameSession.pgn || '',
-    'w', // White always starts
-    userId,
-    -1, // AI opponent
-    'ai',
-    chatId
-  );
+  insertGame(gameSession);
 
   const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
   const url = `${base}/webapp/?session=${sessionId}&color=w`;
@@ -135,18 +166,22 @@ export async function handleNewGame(ctx: Context) {
 
   const sessionId = generateSessionId(userId, opponentId || Date.now());
 
-  pendingChallenges.set(sessionId, {
-    sessionId,
-    chatId,
-    challenger: { id: userId, username, dmChatId: chatId, color: 'w' },
-    opponent: { id: opponentId, username: opponentUsername }
-  });
-
-  await ctx.reply(`@${opponentUsername}, you have been challenged to a game!`, {
+  const message = await ctx.reply(`@${opponentUsername}, you have been challenged to a game!`, {
     reply_markup: {
       inline_keyboard: [[{ text: 'Accept challenge', callback_data: `accept_${sessionId}` }]]
     }
   });
+
+  pendingChallenges.set(sessionId, {
+    sessionId,
+    chatId,
+    challenger: { id: userId, username, dmChatId: chatId, color: 'w' },
+    opponent: { id: opponentId, username: opponentUsername },
+    messageId: message.message_id,
+    telegram: ctx.telegram
+  });
+
+  setTimeout(() => expireChallenge(sessionId), 5 * 60 * 1000);
 }
 
 // Handle text messages - block chess moves, redirect to board
@@ -201,6 +236,7 @@ export function handleResign(ctx: Context) {
 
   // Remove from active games
   games.delete(userGame.id);
+  deleteGame(userGame.id);
 
   ctx.reply(`🏳️ You resigned as ${playerColor}. ${winner} wins!`);
 }
@@ -283,7 +319,7 @@ export async function handleCallbackQuery(ctx: Context) {
     };
 
     games.set(sessionId, gameSession);
-    insertGame.run(sessionId, gameSession.fen, gameSession.pgn || '', 'w', challenge.challenger.id, challenge.opponent.id!, 'pvp', challenge.chatId);
+    insertGame(gameSession);
 
     pendingChallenges.delete(sessionId);
 
@@ -332,6 +368,10 @@ export async function handleCallbackQuery(ctx: Context) {
     }
     ctx.answerCbQuery('Challenge accepted');
 
+  } else if (data === 'solo_easy' || data === 'solo_med' || data === 'solo_hard') {
+    const level = data === 'solo_easy' ? 2 : data === 'solo_med' ? 10 : 15;
+    await handleSoloGame(Object.assign(ctx, { message: { text: `/solo ${level}` } }) as any);
+    ctx.answerCbQuery();
   } else if (data.startsWith('help_')) {
     ctx.answerCbQuery();
     ctx.reply(
@@ -354,6 +394,22 @@ export function handleStats(ctx: Context) {
     `PvP - ${s.pvpWins}W/${s.pvpLosses}L/${s.pvpDraws}D\n` +
     `Solo - ${s.soloWins}W/${s.soloLosses}L/${s.soloDraws}D`;
   ctx.reply(msg);
+}
+
+export function handleLeaderboard(ctx: Context) {
+  const statsMod = require('../store/stats') as typeof import('../store/stats');
+  const all = Object.entries(statsMod.getAllStats());
+  const top = all
+    .map(([id, s]) => ({ id: Number(id), wins: s.pvpWins }))
+    .sort((a, b) => b.wins - a.wins)
+    .slice(0, 10);
+  if (top.length === 0) return ctx.reply('No games played yet');
+  const lines = top.map((e, i) => {
+    const user = getUser(e.id);
+    const name = user?.username ? '@' + user.username : e.id.toString();
+    return `${String(i + 1).padStart(2, ' ')}. ${name.padEnd(10)} ${e.wins}`;
+  });
+  ctx.reply(`🏆 Leaderboard\n<pre>${lines.join('\n')}</pre>`, { parse_mode: 'HTML' });
 }
 
 // Export bot configuration function

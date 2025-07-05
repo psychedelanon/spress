@@ -12,6 +12,7 @@ export interface PlayerStats {
 
 const statsPath = path.join(__dirname, 'stats.json');
 let stats: Record<string, PlayerStats> = {};
+let saveInterval: NodeJS.Timeout | null = null;
 
 export function loadStats() {
   try {
@@ -31,7 +32,20 @@ export function saveStats() {
   }
 }
 
+export function saveStatsPeriodically(intervalMs = 30000) {
+  if (saveInterval) clearInterval(saveInterval);
+  saveInterval = setInterval(saveStats, intervalMs);
+}
+
+export function stopStatsInterval() {
+  if (saveInterval) clearInterval(saveInterval);
+}
+
 loadStats();
+
+export function initStats() {
+  stats = {};
+}
 
 function ensureUser(id: number) {
   if (!stats[id]) {
@@ -69,7 +83,13 @@ export function recordResult(whiteId: number, blackId: number, result: 'white'|'
   saveStats();
 }
 
+export const updateStats = recordResult;
+
 export function getStats(userId: number): PlayerStats {
   ensureUser(userId);
   return stats[userId];
+}
+
+export function getAllStats() {
+  return stats;
 }

@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { Chess } from 'chess.js';
 import bestMove from './engine/stockfish';
-import { getGame, updateGame, deleteGame, updateLastDm, games } from './store/db';
+import { updateGame, deleteGame, games } from './store/games';
 import { ensureHttps } from './utils/ensureHttps';
 import { boardTextFromFEN } from './utils/boardText';
 import { GameSession } from './types';
@@ -243,7 +243,7 @@ export function initWS(server: import('http').Server) {
       gameSession.lastMoveAt = Date.now();
 
       // Update database with new position
-      updateGame.run(game.fen(), game.pgn(), game.turn(), Date.now(), id);
+      updateGame(game.fen(), game.pgn(), game.turn(), Date.now(), id);
 
       const isGameOver = game.isGameOver();
       const payload = {
@@ -283,7 +283,7 @@ export function initWS(server: import('http').Server) {
 
         recordResult(gameSession.players.w.id, gameSession.players.b.id, result, gameSession.mode);
         
-        deleteGame.run(id);
+        deleteGame(id);
         setTimeout(() => {
           sessions.delete(id);
           games.delete(id);
@@ -299,7 +299,9 @@ export function initWS(server: import('http').Server) {
         console.log('AI turn - calculating move...');
         setTimeout(async () => {
           try {
-            const aiMove = await bestMove(game.fen());
+            const level = (gameSession as any).aiLevel || 10;
+            const depth = Math.max(2, Math.floor(level / 3));
+            const aiMove = await bestMove(game.fen(), depth);
             console.log(`AI attempting move: ${aiMove}`);
             
             // Parse AI move (should be in UCI format)
@@ -328,7 +330,7 @@ export function initWS(server: import('http').Server) {
               gameSession.lastMoveAt = Date.now();
               
               // Update database with AI move
-              updateGame.run(game.fen(), game.pgn(), game.turn(), Date.now(), id);
+              updateGame(game.fen(), game.pgn(), game.turn(), Date.now(), id);
               
               const aiGameOver = game.isGameOver();
               const aiPayload = {
@@ -363,7 +365,7 @@ export function initWS(server: import('http').Server) {
                   gameSession.winner = null;
                 }
                 
-                deleteGame.run(id);
+                deleteGame(id);
                 setTimeout(() => {
                   sessions.delete(id);
                   games.delete(id);

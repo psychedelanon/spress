@@ -106,7 +106,7 @@ app.get('/health', (req, res) => {
 });
 
 // Import command handlers
-import { handleNewGame, handleSoloGame, handleMove, handleResign, handleCallbackQuery } from './telechess/commands';
+import { handleNewGame, handleSoloGame, handleMove, handleResign, handleCallbackQuery, handleStats } from './telechess/commands';
 
 // Set up bot commands
 if (bot) {
@@ -125,6 +125,7 @@ if (bot) {
       '/new @opponent - Start a new game\n' +
       '/solo - Play vs AI\n' +
       '/resign - Resign current game\n' +
+      '/stats - Show your stats\n' +
       'Use the interactive board to make moves\n' +
       'Click "♟️ Launch SPRESS Board" to play'
     );
@@ -134,6 +135,7 @@ if (bot) {
   bot.command('new', handleNewGame);
 bot.command('solo', handleSoloGame);
 bot.command('resign', handleResign);
+bot.command('stats', handleStats);
 
 // Reset command for testing (admin only)
 bot.command('reset', (ctx) => {

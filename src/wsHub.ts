@@ -5,6 +5,7 @@ import { getGame, updateGame, deleteGame, updateLastDm, games } from './store/db
 import { ensureHttps } from './utils/ensureHttps';
 import { boardTextFromFEN } from './utils/boardText';
 import { GameSession } from './types';
+import { recordResult } from './store/stats';
 
 interface SessionClients {
   clients: Set<WebSocket>;
@@ -272,11 +273,15 @@ export function initWS(server: import('http').Server) {
         console.log(`Game ${id} ended: ${game.isCheckmate() ? 'Checkmate' : game.isDraw() ? 'Draw' : 'Game over'}`);
         
         // Only set winner if not a draw
+        let result: 'white' | 'black' | 'draw' = 'draw';
         if (!game.isDraw()) {
           gameSession.winner = game.turn() === 'w' ? 'black' : 'white';
+          result = gameSession.winner as 'white' | 'black';
         } else {
           gameSession.winner = null;
         }
+
+        recordResult(gameSession.players.w.id, gameSession.players.b.id, result, gameSession.mode);
         
         deleteGame.run(id);
         setTimeout(() => {

@@ -5,6 +5,7 @@ import { ensureHttps } from '../utils/ensureHttps';
 import { boardTextFromFEN } from '../utils/boardText';
 import { insertGame, games, registerUser, getUser } from '../store/db';
 import { GameSession as NewGameSession, PlayerInfo } from '../types';
+import { getStats, recordResult } from '../store/stats';
 
 // Pending PvP challenges waiting for acceptance
 interface PendingChallenge {
@@ -144,8 +145,7 @@ export async function handleNewGame(ctx: Context) {
   await ctx.reply(`@${opponentUsername}, you have been challenged to a game!`, {
     reply_markup: {
       inline_keyboard: [[{ text: 'Accept challenge', callback_data: `accept_${sessionId}` }]]
-    },
-    parse_mode: 'Markdown'
+    }
   });
 }
 
@@ -177,7 +177,7 @@ export function handleResign(ctx: Context) {
   // Find active game for this user
   let userGame: NewGameSession | undefined;
   for (const game of games.values()) {
-    if (game.players.w.id === userId || game.players.b.id === userId) {
+    if (game.chatId === ctx.chat.id && (game.players.w.id === userId || game.players.b.id === userId)) {
       userGame = game;
       break;
     }
@@ -195,7 +195,10 @@ export function handleResign(ctx: Context) {
 
   // Mark game as finished
   userGame.winner = winner;
-  
+
+  const result: 'white' | 'black' | 'draw' = isWhite ? 'black' : 'white';
+  recordResult(userGame.players.w.id, userGame.players.b.id, result, userGame.mode);
+
   // Remove from active games
   games.delete(userGame.id);
 
@@ -218,21 +221,8 @@ export async function handleCallbackQuery(ctx: Context) {
       return;
     }
     
-    // Simple ASCII board representation
-    const boardText = `
-Current Position:
-\`\`\`
-♜ ♞ ♝ ♛ ♚ ♝ ♞ ♜
-♟ ♟ ♟ ♟ ♟ ♟ ♟ ♟
-. . . . . . . .
-. . . . . . . .
-. . . . . . . .
-. . . . . . . .
-♙ ♙ ♙ ♙ ♙ ♙ ♙ ♙
-♖ ♘ ♗ ♕ ♔ ♗ ♘ ♖
-\`\`\`
-    `;
-    
+    const boardText = `Current Position:\n${boardTextFromFEN(game.fen)}`;
+
     ctx.answerCbQuery();
     ctx.reply(boardText, { parse_mode: 'Markdown' });
     
@@ -354,6 +344,16 @@ Current Position:
       'Good luck! ♟️'
     );
   }
+}
+
+export function handleStats(ctx: Context) {
+  if (!ctx.from) return;
+  const s = getStats(ctx.from.id);
+  const msg =
+    `🏅 Your Stats:\n` +
+    `PvP - ${s.pvpWins}W/${s.pvpLosses}L/${s.pvpDraws}D\n` +
+    `Solo - ${s.soloWins}W/${s.soloLosses}L/${s.soloDraws}D`;
+  ctx.reply(msg);
 }
 
 // Export bot configuration function

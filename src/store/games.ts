@@ -79,3 +79,8 @@ export function deleteGame(sessionId: string) {
 export function getGame(sessionId: string) {
   return games.get(sessionId);
 }
+
+export function purgeFinished(days: number) {
+  const cutoff = Date.now() - days * 86400 * 1000;
+  db.prepare('DELETE FROM games WHERE updatedAt < ?').run(cutoff);
+}

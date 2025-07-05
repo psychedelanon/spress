@@ -8,6 +8,7 @@ export interface PlayerStats {
   soloWins: number;
   soloLosses: number;
   soloDraws: number;
+  rating: number;
 }
 
 const statsPath = path.join(__dirname, 'stats.json');
@@ -55,7 +56,8 @@ function ensureUser(id: number) {
       pvpDraws: 0,
       soloWins: 0,
       soloLosses: 0,
-      soloDraws: 0
+      soloDraws: 0,
+      rating: 1000
     };
   }
 }
@@ -74,6 +76,15 @@ export function recordResult(whiteId: number, blackId: number, result: 'white'|'
       stats[whiteId].pvpDraws++;
       stats[blackId].pvpDraws++;
     }
+
+    const ra = stats[whiteId].rating;
+    const rb = stats[blackId].rating;
+    const ea = 1 / (1 + Math.pow(10, (rb - ra) / 400));
+    const sa = result === 'white' ? 1 : result === 'black' ? 0 : 0.5;
+    const sb = 1 - sa;
+    const eb = 1 / (1 + Math.pow(10, (ra - rb) / 400));
+    stats[whiteId].rating = Math.round(ra + 32 * (sa - ea));
+    stats[blackId].rating = Math.round(rb + 32 * (sb - eb));
   } else {
     // solo mode: whiteId is human, blackId is AI (-1)
     if (result === 'white') stats[whiteId].soloWins++;

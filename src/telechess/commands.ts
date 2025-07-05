@@ -2,6 +2,7 @@ import { Context } from 'telegraf';
 import { InlineKeyboardMarkup } from 'telegraf/types';
 import { GameSession, Player } from './GameSession';
 import { ensureHttps } from '../utils/ensureHttps';
+import { boardTextFromFEN } from '../utils/boardText';
 import { insertGame, games, registerUser, getUser } from '../store/db';
 import { GameSession as NewGameSession, PlayerInfo } from '../types';
 
@@ -324,6 +325,21 @@ Current Position:
         }
       }
     );
+
+    // Send DM to both players with their board links
+    const boardText = boardTextFromFEN(gameSession.fen);
+    if (challenge.challenger.dmChatId) {
+      await ctx.telegram.sendMessage(challenge.challenger.dmChatId,
+        `Game vs @${challenge.opponent.username} started. You are White.\n${boardText}`,
+        { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: 'Open board', web_app: { url: whiteUrl } }]] } }
+      ).catch(() => {});
+    }
+    if (gameSession.players.b.dmChatId && gameSession.players.b.dmChatId !== challenge.chatId) {
+      await ctx.telegram.sendMessage(gameSession.players.b.dmChatId!,
+        `Game vs @${challenge.challenger.username} started. You are Black.\n${boardText}`,
+        { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: 'Open board', web_app: { url: blackUrl } }]] } }
+      ).catch(() => {});
+    }
     ctx.answerCbQuery('Challenge accepted');
 
   } else if (data.startsWith('help_')) {

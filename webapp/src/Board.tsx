@@ -11,13 +11,14 @@ interface ClientMove {
   captureSquare?: string;
 }
 
-type Props = { 
+type Props = {
   fen: string;
   turn: 'w' | 'b';
   isGameOver: boolean;
   isInCheck: boolean;
   color: 'w' | 'b';
   onMoveAttempt: (move: ClientMove) => void;
+  readOnly?: boolean;
 };
 
 // Capture Toast Component
@@ -39,7 +40,7 @@ function CaptureToast({ message, onDismiss }: CaptureToastProps) {
   );
 }
 
-export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveAttempt }: Props) {
+export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveAttempt, readOnly }: Props) {
   console.log('🎯 Board props:', { fen, turn, color });
   
   // SUPER SAFE FEN - always use starting position if anything looks wrong
@@ -362,10 +363,10 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
         id="SPRESSBoard"
         position={safeFen}
         boardOrientation={color === 'w' ? 'white' : 'black'}
-        onPieceDrop={onPieceDrop}
-        onSquareClick={onSquareClick}
-        onMouseOverSquare={onMouseOverSquare}
-        onMouseOutSquare={onMouseOutSquare}
+        onPieceDrop={readOnly ? () => false : onPieceDrop}
+        onSquareClick={readOnly ? () => {} : onSquareClick}
+        onMouseOverSquare={readOnly ? undefined : onMouseOverSquare}
+        onMouseOutSquare={readOnly ? undefined : onMouseOutSquare}
         customSquareStyles={getCustomSquareStyles()}
         customPieces={STABLE_PIECE_RENDERERS}
 
@@ -379,7 +380,7 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
           transition: 'transform 0.15s ease-out',
           boxShadow: '0 4px 20px rgba(224, 19, 19, 0.3)'
         }}
-        arePiecesDraggable={turn === color && !isGameOver}
+        arePiecesDraggable={!readOnly && turn === color && !isGameOver}
         isDraggablePiece={isDraggablePiece}
       />
       

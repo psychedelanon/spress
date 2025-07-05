@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { Chess } from 'chess.js';
 import Board from './Board';
 import ErrorBoundary from './ErrorBoundary';
 import './App.css';
@@ -19,6 +20,10 @@ interface MovePreview {
 }
 
 function App() {
+  const url = new URL(window.location.href);
+  const spectator = url.searchParams.get('spectator') === '1';
+  const replayParam = url.searchParams.get('replay');
+
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [gameState, setGameState] = useState<{
     fen: string;
@@ -38,6 +43,36 @@ function App() {
 
   // Move deduplication
   const moveInFlight = useRef(false);
+  const [replayMoves, setReplayMoves] = useState<string[]>([]);
+  const [replayIndex, setReplayIndex] = useState(0);
+
+  useEffect(() => {
+    if (!replayMoves.length) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') setReplayIndex(i => Math.min(replayMoves.length, i + 1));
+      if (e.key === 'ArrowLeft') setReplayIndex(i => Math.max(0, i - 1));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [replayMoves]);
+
+  useEffect(() => {
+    if (!replayMoves.length) return;
+    const chess = new Chess();
+    for (let i = 0; i < replayIndex; i++) chess.move(replayMoves[i]);
+    setGameState({
+      fen: chess.fen(),
+      color: 'w',
+      session: 'replay',
+      turn: chess.turn() as 'w' | 'b',
+      status: `Move ${replayIndex}/${replayMoves.length}`,
+      isGameOver: replayIndex === replayMoves.length,
+      isInCheck: chess.inCheck(),
+      winner: null,
+      isDraw: chess.isDraw(),
+      isCheckmate: chess.isCheckmate()
+    });
+  }, [replayIndex, replayMoves]);
 
   const sendMove = (move: ClientMove) => {
     if (moveInFlight.current) return; // dedupe
@@ -155,9 +190,32 @@ function App() {
 
   useEffect(() => {
     // Get URL parameters
-    const url = new URL(window.location.href);
     const session = url.searchParams.get('session');
     const color = (url.searchParams.get('color') ?? 'w') as 'w' | 'b';
+
+    if (replayParam) {
+      try {
+        const pgn = atob(replayParam);
+        const chess = new Chess();
+        chess.loadPgn(pgn);
+        setReplayMoves(chess.history());
+        setGameState({
+          fen: chess.fen(),
+          color: 'w',
+          session: 'replay',
+          turn: chess.turn() as 'w' | 'b',
+          status: 'Replay',
+          isGameOver: false,
+          isInCheck: false,
+          winner: null,
+          isDraw: false,
+          isCheckmate: false
+        });
+      } catch (err) {
+        console.error('Failed to load replay', err);
+      }
+      return;
+    }
     
     if (!session) {
       console.error('No session ID provided');
@@ -353,13 +411,14 @@ function App() {
         
         <div className={`board-wrapper ${gameState.isCheckmate ? 'checkmate' : ''}`}>
           <ErrorBoundary>
-            <Board 
+            <Board
               fen={gameState.fen}
               turn={gameState.turn}
               isGameOver={gameState.isGameOver}
               isInCheck={gameState.isInCheck}
               color={gameState.color}
               onMoveAttempt={sendMove}
+              readOnly={spectator || replayMoves.length > 0}
             />
           </ErrorBoundary>
         </div>

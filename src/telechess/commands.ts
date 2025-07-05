@@ -8,6 +8,10 @@ import { registerUser, getUser } from '../store/db';
 import { insertGame, games, deleteGame } from '../store/games';
 import { GameSession as NewGameSession, PlayerInfo } from '../types';
 import { getStats, recordResult } from '../store/stats';
+import { t } from '../i18n';
+import { userPrefs } from '../server';
+
+const WEBAPP_URL = `${ensureHttps(process.env.PUBLIC_URL || 'localhost:3000')}/webapp/`;
 
 // Pending PvP challenges waiting for acceptance
 interface PendingChallenge {
@@ -341,6 +345,12 @@ export async function handleCallbackQuery(ctx: Context) {
     handleResign(ctx);
     ctx.answerCbQuery();
 
+  } else if (data.startsWith('spectate_')) {
+    const id = data.replace('spectate_', '');
+    const url = `${WEBAPP_URL}?id=${id}&spectator=1`;
+    await ctx.answerCbQuery();
+    await ctx.reply(`Watch live: ${url}`);
+
   } else if (data.startsWith('accept_')) {
     const sessionId = data.replace('accept_', '');
     const challenge = pendingChallenges.get(sessionId);
@@ -408,6 +418,9 @@ export async function handleCallbackQuery(ctx: Context) {
             ],
             [
               { text: 'ℹ️ How to Play', callback_data: `help_${sessionId}` }
+            ],
+            [
+              { text: '👀 Watch', callback_data: `spectate_${sessionId}` }
             ]
           ]
         }
@@ -460,10 +473,11 @@ export function handleStats(ctx: Context) {
 
 export function handleLeaderboard(ctx: Context) {
   const statsMod = require('../store/stats') as typeof import('../store/stats');
+  const { seenChats } = statsMod;
   const chatId = ctx.chat.id;
   const all = Object.entries(statsMod.getAllStats());
   const top = all
-    .filter(([_, s]) => (s.chats || []).includes(chatId))
+    .filter(([_, s]) => seenChats.has(chatId) && (s.chats || []).includes(chatId))
     .map(([id, s]) => ({ id: Number(id), rating: s.rating }))
     .sort((a, b) => b.rating - a.rating)
     .slice(0, 10);
@@ -473,7 +487,8 @@ export function handleLeaderboard(ctx: Context) {
     const name = user?.username ? '@' + user.username : e.id.toString();
     return `${String(i + 1).padStart(2, ' ')}. ${name.padEnd(10)} ${e.rating}`;
   });
-  ctx.reply(`🏆 Leaderboard\n<pre>${lines.join('\n')}</pre>`, { parse_mode: 'HTML' });
+  const lang = userPrefs[ctx.from?.id || 0]?.lang || 'en';
+  ctx.reply(`${t('leaderboard', { lng: lang })}\n<pre>${lines.join('\n')}</pre>`, { parse_mode: 'HTML' });
 }
 
 // Export bot configuration function

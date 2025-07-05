@@ -301,6 +301,27 @@ export function initWS(server: import('http').Server) {
         }
 
         recordResult(gameSession.players.w.id, gameSession.players.b.id, result, gameSession.mode, gameSession.chatId);
+
+        if (process.env.ENABLE_SHARE_HOOK === '1') {
+          const botUsername = process.env.BOT_USERNAME || 'spressbot';
+          const txt = `I just won on SPRESS! ♟️ t.me/${botUsername}?startgroup`;
+          try {
+            await botInstance.telegram.sendMessage(gameSession.chatId, txt, {
+              reply_markup: { inline_keyboard: [[{ text: 'Share', switch_inline_query: txt }]] }
+            });
+          } catch (err) {
+            console.error('Failed to send share message', err);
+          }
+        }
+
+        try {
+          const url = `${ensureHttps(process.env.PUBLIC_URL || 'localhost:3000')}/webapp/?replay=${Buffer.from(game.pgn()).toString('base64')}`;
+          await botInstance.telegram.sendMessage(gameSession.chatId, 'Game over', {
+            reply_markup: { inline_keyboard: [[{ text: '▶️ Replay', url }]] }
+          });
+        } catch (err) {
+          console.error('Failed to send replay link', err);
+        }
         
         deleteGame(id);
         setTimeout(() => {

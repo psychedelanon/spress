@@ -7,7 +7,9 @@ import { initWS, setBotInstance } from './wsHub';
 import { registerUser } from './store/db';
 import { games, loadGames } from './store/games';
 import { loadStats, saveStatsPeriodically, saveStats, getAllStats } from './store/stats';
-import pino from 'pino';
+import { log } from './log';
+import { Counter, Registry } from 'prom-client';
+import { t } from './i18n';
 import rateLimit from 'telegraf-ratelimit';
 import cron from 'node-cron';
 import * as Sentry from '@sentry/node';
@@ -15,12 +17,15 @@ import './store/db'; // Initialize user registry
 
 dotenv.config();
 
-const logger = pino();
+const logger = log;
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 const port = process.env.PORT || 3000;
+export const userPrefs: Record<number, { lang: string }> = {};
+
+const cmds = new Counter({ name: 'commands_total', help: 'total cmds' });
 
 Sentry.init({ dsn: process.env.SENTRY_DSN || '' });
 
@@ -134,20 +139,14 @@ if (bot) {
     if (ctx.from && ctx.chat) {
       registerUser(ctx.from.id, ctx.chat.id, ctx.from.username);
       logger.info(`User ${ctx.from.id} (${ctx.from.username || 'unnamed'}) registered for DMs`);
+      userPrefs[ctx.from.id] = { lang: ctx.from.language_code || 'en' };
     }
     ctx.reply('Welcome to SPRESS Chess! ♟️\nSend /new @opponent to start a game or /solo to play against AI.');
   });
 
   bot.help((ctx) => {
-    ctx.reply(
-      'SPRESS Chess Commands:\n' +
-      '/new @opponent - Start a new game\n' +
-      '/solo - Play vs AI\n' +
-      '/resign - Resign current game\n' +
-      '/stats - Show your stats\n' +
-      'Use the interactive board to make moves\n' +
-      'Click "♟️ Launch SPRESS Board" to play'
-    );
+    const lang = userPrefs[ctx.from?.id || 0]?.lang;
+    ctx.reply(t('help', { lng: lang }));
   });
 
   // Register command handlers
@@ -178,13 +177,13 @@ bot.command('reset', (ctx) => {
 
   // Register users on any interaction
   bot.use(async (ctx, next) => {
-    const started = Date.now();
+    const t = Date.now();
     if (ctx.from && ctx.chat) {
       registerUser(ctx.from.id, ctx.chat.id, ctx.from.username);
     }
     await next();
-    const ms = Date.now() - started;
-    logger.info({ type: ctx.updateType, ms }, 'update');
+    cmds.inc();
+    logger.info({ type: ctx.updateType, ms: Date.now() - t });
   });
 
   // Error handling
@@ -244,4 +243,10 @@ process.once('SIGTERM', () => {
   });
 });
 
-export { bot, app }; 
+http.createServer(async (req, res) => {
+  if (req.url === '/metrics') {
+    res.end(await Registry.globalRegistry.metrics());
+  }
+}).listen(process.env.METRICS_PORT || 9000);
+
+export { bot, app };

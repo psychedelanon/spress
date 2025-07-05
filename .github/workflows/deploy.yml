@@ -10,8 +10,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm ci
+      - run: npm run lint --silent
       - run: npx tsc --noEmit
       - run: npm test --silent
+      - name: docker build test
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: false
+          push: false
   deploy:
     needs: ci
     runs-on: ubuntu-latest

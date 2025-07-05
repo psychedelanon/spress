@@ -236,7 +236,7 @@ export function handleResign(ctx: Context) {
   userGame.winner = winner;
 
   const result: 'white' | 'black' | 'draw' = isWhite ? 'black' : 'white';
-  recordResult(userGame.players.w.id, userGame.players.b.id, result, userGame.mode);
+  recordResult(userGame.players.w.id, userGame.players.b.id, result, userGame.mode, ctx.chat.id);
 
   // Remove from active games
   games.delete(userGame.id);
@@ -295,11 +295,16 @@ export async function handleCallbackQuery(ctx: Context) {
 
     ctx.answerCbQuery();
     const fen = game.fen;
-    if (lastFen !== fen) {
-      lastPng = await fenToPng(fen);
-      lastFen = fen;
+    try {
+      if (lastFen !== fen) {
+        lastPng = await fenToPng(fen);
+        lastFen = fen;
+      }
+      await ctx.replyWithPhoto({ source: lastPng }, { caption: `Turn: ${game.fen.split(' ')[1] === 'w' ? 'White' : 'Black'}` });
+    } catch (err) {
+      const boardText = boardTextFromFEN(fen);
+      await ctx.reply(`\u26a0\ufe0f Failed to render board, falling back:\n${boardText}`, { parse_mode: 'Markdown' });
     }
-    await ctx.replyWithPhoto({ source: lastPng }, { caption: `Turn: ${game.fen.split(' ')[1] === 'w' ? 'White' : 'Black'}` });
     
   } else if (data.startsWith('show_moves_')) {
     const sessionId = data.replace('show_moves_', '');
@@ -447,8 +452,10 @@ export function handleStats(ctx: Context) {
 
 export function handleLeaderboard(ctx: Context) {
   const statsMod = require('../store/stats') as typeof import('../store/stats');
+  const chatId = ctx.chat.id;
   const all = Object.entries(statsMod.getAllStats());
   const top = all
+    .filter(([_, s]) => (s.chats || []).includes(chatId))
     .map(([id, s]) => ({ id: Number(id), rating: s.rating }))
     .sort((a, b) => b.rating - a.rating)
     .slice(0, 10);

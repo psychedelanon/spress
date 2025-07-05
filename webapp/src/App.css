@@ -328,28 +328,25 @@ body {
 
 .board-overlay.top-left {
   top: -20px;
-  left: -20px;
-  width: 120px;
-  height: 80px;
+  left: -160px;
+  width: 140px;
+  height: auto;
+  min-height: 120px;
 }
 
-.overlay-placeholder {
+/* PNG Board Overlay */
+.board-overlay-image {
   width: 100%;
-  height: 100%;
-  background: rgba(0, 83, 255, 0.1);
-  border: 2px dashed rgba(255, 215, 0, 0.3);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-  color: rgba(255, 215, 0, 0.5);
-  transition: all 0.3s ease;
+  height: auto;
+  max-width: 150px;
+  object-fit: contain;
+  pointer-events: none;
+  opacity: 0.9;
+  transition: opacity 0.3s ease;
 }
 
-.overlay-placeholder:hover {
-  background: rgba(0, 83, 255, 0.2);
-  border-color: rgba(255, 215, 0, 0.6);
+.board-overlay-image:hover {
+  opacity: 1;
 }
 
 /* Enhanced board container with relative positioning for toast */
@@ -421,9 +418,13 @@ body {
   
   .board-overlay.top-left {
     top: -15px;
-    left: -15px;
-    width: 80px;
-    height: 60px;
+    left: -120px;
+    width: 100px;
+    min-height: 80px;
+  }
+  
+  .board-overlay-image {
+    max-width: 100px;
   }
   
   .game-info {

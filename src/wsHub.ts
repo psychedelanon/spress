@@ -112,7 +112,10 @@ export function initWS(server: import('http').Server) {
     
     // If no game session exists, this is likely a stale/expired session
     if (!gameSession) {
-      console.log(`Rejecting connection to expired/invalid session: ${id}`);
+      // Reduced logging for expired sessions to prevent spam
+      if (Math.random() < 0.1) { // Only log 10% of expired session attempts
+        console.log(`Rejecting connection to expired/invalid session: ${id}`);
+      }
       ws.send(JSON.stringify({ 
         type: 'session_expired', 
         error: 'This game session has expired. Please start a new game.' 
@@ -124,7 +127,10 @@ export function initWS(server: import('http').Server) {
     // Get or create session clients
     let sessionClients = sessions.get(id);
     if (!sessionClients) {
-      sessionClients = { game: new Chess(), clients: new Set() };
+      console.log(`🐛 Creating new Chess instance for session ${id}`);
+      const chessInstance = new Chess();
+      console.log(`🐛 Fresh Chess instance FEN: "${chessInstance.fen()}"`);
+      sessionClients = { game: chessInstance, clients: new Set() };
       sessions.set(id, sessionClients);
     }
     
@@ -134,8 +140,14 @@ export function initWS(server: import('http').Server) {
     sessionClients.clients.add(ws);
     
     // Load game state from database (we know gameSession exists now)
+    console.log(`🐛 Loading game state for session ${id}:`);
+    console.log(`🐛 Database FEN: "${gameSession.fen}"`);
+    console.log(`🐛 FEN length: ${gameSession.fen.length}`);
+    
     try {
       sessionClients.game.load(gameSession.fen);
+      console.log(`🐛 Chess.js loaded successfully`);
+      console.log(`🐛 Chess.js FEN after load: "${sessionClients.game.fen()}"`);
     } catch (err) {
       console.error(`Failed to load FEN for session ${id}:`, gameSession.fen, err);
       ws.send(JSON.stringify({ 
@@ -163,6 +175,13 @@ export function initWS(server: import('http').Server) {
 
     ws.on('message', async raw => {
       const msg = JSON.parse(raw.toString());
+      
+      // Handle keepalive pings
+      if (msg.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong' }));
+        return;
+      }
+      
       if (msg.type !== 'move') return;
 
       const { game } = sessionClients!;
@@ -378,13 +397,17 @@ export function initWS(server: import('http').Server) {
     ws.on('close', () => {
       sessionClients?.clients.delete(ws);
       if (sessionClients?.clients.size === 0) {
-        // Clean up empty sessions after a delay
+        // Clean up empty sessions immediately for expired games, 
+        // or after a delay for active games
+        const gameSession = games.get(id);
+        const isExpiredGame = !gameSession;
+        
         setTimeout(() => {
           if (sessionClients?.clients.size === 0) {
             sessions.delete(id);
-            console.log(`Cleaned up empty session ${id}`);
+            console.log(`Cleaned up ${isExpiredGame ? 'expired' : 'empty'} session ${id}`);
           }
-        }, 30000);
+        }, isExpiredGame ? 1000 : 30000); // Quick cleanup for expired games
       }
     });
   });

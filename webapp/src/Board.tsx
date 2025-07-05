@@ -1,6 +1,6 @@
-import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
+import { Chess } from 'chess.js';
 import { STABLE_PIECE_RENDERERS } from './pieceRenderers';
 
 interface ClientMove {
@@ -20,12 +20,7 @@ type Props = {
   onMoveAttempt: (move: ClientMove) => void;
 };
 
-// Piece name mapping for capture messages
-const pieceNames: Record<string, string> = {
-  'p': 'Pawn', 'r': 'Rook', 'n': 'Knight', 
-  'b': 'Bishop', 'q': 'Queen', 'k': 'King'
-};
-
+// Capture Toast Component
 interface CaptureToastProps {
   message: string;
   onDismiss: () => void;
@@ -45,168 +40,122 @@ function CaptureToast({ message, onDismiss }: CaptureToastProps) {
 }
 
 export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveAttempt }: Props) {
-  const chessRef = useRef(new Chess('start'));
+  console.log('🎯 Board props:', { fen, turn, color });
   
-  // Track valid FEN to prevent passing bad FENs to Chessboard
-  const [validFen, setValidFen] = useState<string>('start');
-  
-  // Keep chess.js in sync with props and validate FEN
-  useEffect(() => {
-    if (!fen || fen === '') {
-      setValidFen('start');
-      return;
-    }
-    
-    try {
-      chessRef.current.load(fen);
-      setValidFen(fen);  // Only update validFen if load succeeds
-    } catch (err) {
-      console.error('Bad FEN received:', fen, err);
-      // Don't update validFen - keep the last known good position
-      // This prevents react-chessboard from receiving invalid FEN
-      return;
-    }
-  }, [fen]);
+  // SUPER SAFE FEN - always use starting position if anything looks wrong
+  const safeFen = (fen && fen !== 'start' && fen.length > 20) ? fen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  console.log('🎯 Using safe FEN:', safeFen);
 
-  // UI-only state (no game state)
-  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
+  // Chess.js instance for move validation and highlighting
+  const chessRef = useRef(new Chess());
+  
+  // Keep chess.js in sync with position
+  useEffect(() => {
+    try {
+      chessRef.current.load(safeFen);
+    } catch (err) {
+      console.error('Failed to load FEN in chess.js:', err);
+      chessRef.current.load('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+    }
+  }, [safeFen]);
+
+  // UI state for delightful effects
   const [captureFlashSquare, setCaptureFlashSquare] = useState<string | null>(null);
   const [captureToast, setCaptureToast] = useState<string | null>(null);
-  
-  // Mobile drag/tap conflict prevention
-  const isDragging = useRef(false);
-
-  // Use the stable piece renderers - this reference NEVER changes
-  const customPieces = STABLE_PIECE_RENDERERS;
-
-  // Debug logging and piece testing
-  useEffect(() => {
-    console.log('[DEBUG] customPieces created:', Object.keys(customPieces));
-    console.log('[DEBUG] Sample piece function:', customPieces.wK);
-    
-    // Test if piece files are accessible
-    const testImg = new Image();
-    testImg.onload = () => {
-      console.log('[DEBUG] ✅ wK.svg loaded successfully');
-      console.log('[DEBUG] Image dimensions:', testImg.width, 'x', testImg.height);
-    };
-    testImg.onerror = (error) => {
-      console.log('[DEBUG] ❌ wK.svg failed to load - check file path');
-      console.error('[DEBUG] Error details:', error);
-      
-      // Try fetching directly to get more info
-      fetch(`${import.meta.env.BASE_URL}pieces/wK.svg`)
-        .then(response => {
-          console.log('[DEBUG] Fetch response status:', response.status);
-          console.log('[DEBUG] Content-Type:', response.headers.get('content-type'));
-          return response.text();
-        })
-        .then(svgText => {
-          console.log('[DEBUG] SVG content length:', svgText.length);
-          console.log('[DEBUG] SVG starts with:', svgText.substring(0, 100));
-        })
-        .catch(fetchError => {
-          console.error('[DEBUG] Fetch error:', fetchError);
-        });
-    };
-    testImg.src = `${import.meta.env.BASE_URL}pieces/wK.svg`;
-  }, []); // Empty dependency array since STABLE_PIECE_RENDERERS never changes
-
-  // Clear UI state when game updates (for server captures)
-  useEffect(() => {
-    setSelectedSquare(null);
-  }, [fen]);
-
-  /* ───────────────────────────────────────────────────────── drag handlers */
-  const onDragStart = useCallback(() => {
-    isDragging.current = true;
-  }, []);
-
-  const onDragEnd = useCallback(() => {
-    // Small delay to prevent tap events from firing immediately after drag
-    setTimeout(() => {
-      isDragging.current = false;
-    }, 50);
-  }, []);
-
-  const onPieceDrop = useCallback(
-    (sourceSquare: string, targetSquare: string) => {
-      console.log('🎯 [MOVE ATTEMPT]', { sourceSquare, targetSquare, turn, color, isGameOver });
-      
-      // Don't allow moves if game is over
-      if (isGameOver) {
-        console.log('❌ Move blocked: game over');
-        return false;
-      }
-      // only allow if it's my move
-      if (turn !== color) {
-        console.log('❌ Move blocked: wrong turn', { turn, color });
-        return false;
-      }
-
-      // Validate move locally but don't keep it on the board
-      const move = chessRef.current.move({
-        from: sourceSquare,
-        to: targetSquare,
-        promotion: 'q',
-      });
-
-      if (move == null) return false; // illegal move - snap back
-      
-      // Revert the move immediately (we only validated it)
-      chessRef.current.undo();
-      
-      // Handle capture flash UI only (based on the validated move)
-      if (move.captured) {
-        const capturedPieceName = pieceNames[move.captured.toLowerCase()] || 'Piece';
-        const capturingColor = move.color === 'w' ? 'White' : 'Black';
-        
-        // Flash the destination square
-        setCaptureFlashSquare(targetSquare);
-        setTimeout(() => setCaptureFlashSquare(null), 400);
-        
-        // Show capture toast
-        setCaptureToast(`💥 ${capturingColor} captured a ${capturedPieceName}!`);
-      }
-
-      // Clear UI state only (no game state updates!)
-      setSelectedSquare(null);
-
-      // Send move to parent via callback
-      onMoveAttempt({
-        from: sourceSquare,
-        to: targetSquare,
-        promotion: 'q',
-        captured: move.captured ? pieceNames[move.captured.toLowerCase()] || 'Piece' : undefined,
-        captureSquare: move.captured ? targetSquare : undefined
-      });
-      
-      // Always return false - piece will snap back, server will update position later
-      return false;
-    },
-    [turn, color, isGameOver, onMoveAttempt],
-  );
-
-  /* ───────────────────────────────────────────────────────── square styles */
   const [moveSquares, setMoveSquares] = useState<Record<string, React.CSSProperties>>({});
+  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
 
-  // Function to find the king's square for the current player
-  const findKingSquare = useCallback((playerColor: 'w' | 'b') => {
-    const board = chessRef.current.board();
-    for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 8; col++) {
-        const piece = board[row][col];
-        if (piece && piece.type === 'k' && piece.color === playerColor) {
-          const file = String.fromCharCode(97 + col); // a-h
-          const rank = (8 - row).toString(); // 1-8
-          return file + rank;
-        }
-      }
+  // Piece name mapping for capture messages
+  const pieceNames: Record<string, string> = {
+    'p': 'Pawn', 'r': 'Rook', 'n': 'Knight', 
+    'b': 'Bishop', 'q': 'Queen', 'k': 'King'
+  };
+
+  const onPieceDrop = useCallback((sourceSquare: string, targetSquare: string) => {
+    console.log('🎯 Move attempt:', sourceSquare, '->', targetSquare);
+    
+    if (isGameOver || turn !== color) {
+      console.log('🎯 Move blocked');
+      return false;
     }
-    return null;
-  }, []);
 
-  // Generate custom square styles including king check animation and capture flash
+    // Validate move using chess.js for proper feedback
+    const move = chessRef.current.move({
+      from: sourceSquare,
+      to: targetSquare,
+      promotion: 'q'
+    });
+
+    if (!move) {
+      console.log('🎯 Illegal move');
+      return false; // Illegal move
+    }
+
+    // Undo the move (we just validated it)
+    chessRef.current.undo();
+
+    // Add capture flash effect if it was a capture
+    if (move.captured) {
+      setCaptureFlashSquare(targetSquare);
+      setTimeout(() => setCaptureFlashSquare(null), 400);
+      setCaptureToast(`💥 ${color === 'w' ? 'White' : 'Black'} captured a ${pieceNames[move.captured.toLowerCase()] || 'piece'}!`);
+    }
+
+    // Clear selection
+    setSelectedSquare(null);
+    setMoveSquares({});
+
+    // Send move to server
+    onMoveAttempt({
+      from: sourceSquare,
+      to: targetSquare,
+      promotion: 'q'
+    });
+    
+    // Always snap back - server will update
+    return false;
+  }, [turn, color, isGameOver, onMoveAttempt, pieceNames]);
+
+  // Show legal moves for a square - works for ANY piece to show what's possible
+  const highlightLegalMoves = useCallback((square: string) => {
+    if (isGameOver) return;
+    
+    try {
+      // Check if there's a piece on this square
+      const piece = chessRef.current.get(square as any);
+      if (!piece) {
+        setMoveSquares({});
+        return;
+      }
+      
+      // Get all possible moves from this square
+      const moves = chessRef.current.moves({ square: square as any, verbose: true }) as any[];
+      const highlights: Record<string, React.CSSProperties> = {};
+      
+      moves.forEach(move => { 
+        // Different highlight for captures vs normal moves
+        const isCapture = move.captured;
+        highlights[move.to] = isCapture ? {
+          background: 'radial-gradient(circle, rgba(224, 19, 19, 0.8) 35%, transparent 36%)',
+          borderRadius: '50%',
+          border: '3px solid #E01313',
+          boxShadow: '0 0 8px rgba(224, 19, 19, 0.6)'
+        } : {
+          background: 'radial-gradient(circle, rgba(0, 83, 255, 0.7) 35%, transparent 36%)',
+          borderRadius: '50%',
+          border: '3px solid #0053FF',
+          boxShadow: '0 0 8px rgba(0, 83, 255, 0.4)'
+        };
+      });
+      
+      setMoveSquares(highlights);
+    } catch (err) {
+      console.error('Error highlighting moves:', err);
+      setMoveSquares({});
+    }
+  }, [isGameOver]);
+
+  // Generate delightful square styles
   const getCustomSquareStyles = useCallback(() => {
     const styles: Record<string, React.CSSProperties> = { ...moveSquares };
     
@@ -229,132 +178,126 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
     
     // Add king check animation if in check
     if (isInCheck) {
-      const kingSquare = findKingSquare(turn);
-      if (kingSquare) {
-        styles[kingSquare] = {
-          ...styles[kingSquare],
-          border: '4px solid #E01313',
-          borderRadius: '50%',
-          animation: 'shake 0.5s ease-in-out infinite',
-          boxShadow: '0 0 15px rgba(224, 19, 19, 0.7)'
-        };
+      // Find king square dynamically
+      try {
+        const board = chessRef.current.board();
+        for (let row = 0; row < 8; row++) {
+          for (let col = 0; col < 8; col++) {
+            const piece = board[row][col];
+            if (piece && piece.type === 'k' && piece.color === turn) {
+              const file = String.fromCharCode(97 + col); // a-h
+              const rank = (8 - row).toString(); // 1-8
+              const kingSquare = file + rank;
+              styles[kingSquare] = {
+                ...styles[kingSquare],
+                border: '4px solid #E01313',
+                borderRadius: '50%',
+                animation: 'shake 0.5s ease-in-out infinite',
+                boxShadow: '0 0 15px rgba(224, 19, 19, 0.7)'
+              };
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error finding king square:', err);
       }
     }
     
     return styles;
-  }, [moveSquares, selectedSquare, captureFlashSquare, isInCheck, turn, findKingSquare]);
+  }, [moveSquares, selectedSquare, captureFlashSquare, isInCheck, turn]);
 
-  const highlightMoves = useCallback((square: string) => {
+  // Square click handler for mobile
+  const onSquareClick = useCallback((square: string) => {
     if (turn !== color || isGameOver) return;
     
-    const moves = chessRef.current.moves({ square: square as any, verbose: true }) as any[];
-    const highlights: Record<string, React.CSSProperties> = {};
-    
-    moves.forEach(m => { 
-      highlights[m.to] = { 
-        background: 'radial-gradient(circle, #ffde00 25%, transparent 26%)',
-        borderRadius: '50%'
-      }; 
-    });
-    
-    setMoveSquares(highlights);
-  }, [turn, color, isGameOver]);
+    try {
+      const piece = chessRef.current.get(square as any);
+      
+      // If clicking on own piece, select it and show moves
+      if (piece && piece.color === color) {
+        setSelectedSquare(square);
+        highlightLegalMoves(square);
+      }
+      // If a piece is selected and clicking on a highlighted square, make the move
+      else if (selectedSquare && moveSquares[square]) {
+        // Try the move
+        const move = chessRef.current.move({
+          from: selectedSquare,
+          to: square,
+          promotion: 'q'
+        });
 
-  const onMouseOverSquare = (sq: string) => {
-    highlightMoves(sq);
-  };
+        if (move) {
+          // Undo the move (we just validated it)
+          chessRef.current.undo();
+          
+          // Handle capture flash
+          if (move.captured) {
+            setCaptureFlashSquare(square);
+            setTimeout(() => setCaptureFlashSquare(null), 400);
+            setCaptureToast(`💥 ${color === 'w' ? 'White' : 'Black'} captured a ${pieceNames[move.captured.toLowerCase()] || 'piece'}!`);
+          }
 
-  const onMouseOutSquare = () => {
-    // Only clear highlights if no square is selected
+          // Send move to server
+          onMoveAttempt({
+            from: selectedSquare,
+            to: square,
+            promotion: 'q'
+          });
+        }
+        
+        // Clear selection
+        setSelectedSquare(null);
+        setMoveSquares({});
+      }
+      // If clicking elsewhere, clear selection
+      else {
+        setSelectedSquare(null);
+        setMoveSquares({});
+      }
+    } catch (err) {
+      console.error('Error in square click:', err);
+      setSelectedSquare(null);
+      setMoveSquares({});
+    }
+  }, [turn, color, isGameOver, selectedSquare, moveSquares, highlightLegalMoves, onMoveAttempt, pieceNames]);
+
+  // Mouse hover for move previews
+  const onMouseOverSquare = useCallback((square: string) => {
+    // Always show moves on hover, but don't override selected square highlights
+    highlightLegalMoves(square);
+  }, [highlightLegalMoves]);
+
+  const onMouseOutSquare = useCallback(() => {
+    // Only clear if no square is selected
     if (!selectedSquare) {
       setMoveSquares({});
     }
-  };
+  }, [selectedSquare]);
 
-  // Handle square clicks for mobile tap-to-select
-  const onSquareClick = useCallback((square: string) => {
-    // Ignore taps when a drag just finished
-    if (isDragging.current) return;
-
-    if (turn !== color || isGameOver) return;
-    
-    const piece = chessRef.current.get(square as any);
-    
-    // If clicking on own piece, select it
-    if (piece && piece.color === color) {
-      setSelectedSquare(square);
-      highlightMoves(square);
-    }
-    // If a piece is selected and clicking on a highlighted square, make the move
-    else if (selectedSquare && moveSquares[square]) {
-      // Validate move locally but don't keep it on the board
-      const move = chessRef.current.move({
-        from: selectedSquare,
-        to: square,
-        promotion: 'q',
-      });
-
-      if (move != null) {
-        // Revert the move immediately (we only validated it)
-        chessRef.current.undo();
-        
-        // Handle capture flash UI only (based on the validated move)
-        if (move.captured) {
-          const capturedPieceName = pieceNames[move.captured.toLowerCase()] || 'Piece';
-          const capturingColor = move.color === 'w' ? 'White' : 'Black';
-          
-          // Flash the destination square
-          setCaptureFlashSquare(square);
-          setTimeout(() => setCaptureFlashSquare(null), 400);
-          
-          // Show capture toast
-          setCaptureToast(`💥 ${capturingColor} captured a ${capturedPieceName}!`);
-        }
-
-        // Send move to parent via callback
-        onMoveAttempt({
-          from: selectedSquare,
-          to: square,
-          promotion: 'q',
-          captured: move.captured ? pieceNames[move.captured.toLowerCase()] || 'Piece' : undefined,
-          captureSquare: move.captured ? square : undefined
-        });
-      }
-      
-      // Clear selection after move attempt
-      setSelectedSquare(null);
-      setMoveSquares({});
-    }
-    // If clicking elsewhere, clear selection
-    else {
-      setSelectedSquare(null);
-      setMoveSquares({});
-    }
-  }, [turn, color, isGameOver, selectedSquare, moveSquares, highlightMoves, onMoveAttempt]);
-
-  /* ───────────────────────────────────────────────────────── render board */
   return (
     <div className="board-container">
       <Chessboard
         id="SPRESSBoard"
-        position={validFen}
+        position={safeFen}
         boardOrientation={color === 'w' ? 'white' : 'black'}
         onPieceDrop={onPieceDrop}
-        onPieceDragBegin={onDragStart}
-        onPieceDragEnd={onDragEnd}
+        onSquareClick={onSquareClick}
         onMouseOverSquare={onMouseOverSquare}
         onMouseOutSquare={onMouseOutSquare}
-        onSquareClick={onSquareClick}
         customSquareStyles={getCustomSquareStyles()}
-        customPieces={customPieces as any}
+        customPieces={STABLE_PIECE_RENDERERS}
+
         animationDuration={150}
         boardWidth={Math.min(window.innerWidth - 40, 480)}
         customDarkSquareStyle={{ backgroundColor: '#0053FF' }}   // SPRESS blue
-        customLightSquareStyle={{ backgroundColor: '#FFD700' }} // SPRESS yellow
+        customLightSquareStyle={{ backgroundColor: '#FFD700' }}  // SPRESS yellow
         customBoardStyle={{
           borderRadius: '8px',
           border: '4px solid #E01313',
-          transition: 'transform 0.15s ease-out'
+          transition: 'transform 0.15s ease-out',
+          boxShadow: '0 4px 20px rgba(224, 19, 19, 0.3)'
         }}
         arePiecesDraggable={turn === color && !isGameOver}
       />

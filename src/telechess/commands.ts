@@ -41,6 +41,14 @@ export async function handleSoloGame(ctx: Context) {
   const username = ctx.from!.username || 'Player';
   const chatId = ctx.chat.id;
   
+  // Clean up any existing games for this user
+  for (const [gameId, game] of games.entries()) {
+    if (game.players.w.id === userId || game.players.b?.id === userId) {
+      console.log(`Cleaning up previous game ${gameId} for user ${userId}`);
+      games.delete(gameId);
+    }
+  }
+  
   // Register user for DM capability
   registerUser(userId, chatId, username);
 
@@ -110,6 +118,14 @@ export async function handleNewGame(ctx: Context) {
   
   const opponentUsername = args[1].substring(1); // Remove @
   const sessionId = `pvp-${userId}-${Date.now()}`;
+  
+  // Clean up any existing games for this user
+  for (const [gameId, game] of games.entries()) {
+    if (game.players.w.id === userId || game.players.b?.id === userId) {
+      console.log(`Cleaning up previous game ${gameId} for user ${userId}`);
+      games.delete(gameId);
+    }
+  }
   
   // Register challenger for DM capability
   registerUser(userId, chatId, username);

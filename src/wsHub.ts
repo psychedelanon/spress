@@ -281,7 +281,7 @@ export function initWS(server: import('http').Server) {
           gameSession.winner = null;
         }
 
-        recordResult(gameSession.players.w.id, gameSession.players.b.id, result, gameSession.mode);
+        recordResult(gameSession.players.w.id, gameSession.players.b.id, result, gameSession.mode, gameSession.chatId);
         
         deleteGame(id);
         setTimeout(() => {

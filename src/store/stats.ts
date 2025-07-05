@@ -9,6 +9,7 @@ export interface PlayerStats {
   soloLosses: number;
   soloDraws: number;
   rating: number;
+  chats: number[];
 }
 
 const statsPath = path.join(__dirname, 'stats.json');
@@ -57,12 +58,19 @@ function ensureUser(id: number) {
       soloWins: 0,
       soloLosses: 0,
       soloDraws: 0,
-      rating: 1000
+      rating: 1000,
+      chats: []
     };
   }
 }
 
-export function recordResult(whiteId: number, blackId: number, result: 'white'|'black'|'draw', mode: 'pvp'|'ai') {
+export function recordResult(
+  whiteId: number,
+  blackId: number,
+  result: 'white' | 'black' | 'draw',
+  mode: 'pvp' | 'ai',
+  chatId?: number
+) {
   ensureUser(whiteId);
   ensureUser(blackId);
   if (mode === 'pvp') {
@@ -85,11 +93,18 @@ export function recordResult(whiteId: number, blackId: number, result: 'white'|'
     const eb = 1 / (1 + Math.pow(10, (ra - rb) / 400));
     stats[whiteId].rating = Math.round(ra + 32 * (sa - ea));
     stats[blackId].rating = Math.round(rb + 32 * (sb - eb));
+    if (chatId !== undefined) {
+      if (!stats[whiteId].chats.includes(chatId)) stats[whiteId].chats.push(chatId);
+      if (!stats[blackId].chats.includes(chatId)) stats[blackId].chats.push(chatId);
+    }
   } else {
     // solo mode: whiteId is human, blackId is AI (-1)
     if (result === 'white') stats[whiteId].soloWins++;
     else if (result === 'black') stats[whiteId].soloLosses++;
     else stats[whiteId].soloDraws++;
+    if (chatId !== undefined && !stats[whiteId].chats.includes(chatId)) {
+      stats[whiteId].chats.push(chatId);
+    }
   }
   saveStats();
 }

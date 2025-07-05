@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-export interface PlayerStats {
+export interface UserStats {
   pvpWins: number;
   pvpLosses: number;
   pvpDraws: number;
@@ -13,13 +13,14 @@ export interface PlayerStats {
 }
 
 const statsPath = path.join(__dirname, 'stats.json');
-let stats: Record<string, PlayerStats> = {};
+let stats: Record<string, UserStats> = {};
 let saveInterval: NodeJS.Timeout | null = null;
+export const seenChats = new Set<number>();
 
 export function loadStats() {
   try {
     if (fs.existsSync(statsPath)) {
-      stats = JSON.parse(fs.readFileSync(statsPath, 'utf8')) as Record<string, PlayerStats>;
+      stats = JSON.parse(fs.readFileSync(statsPath, 'utf8')) as Record<string, UserStats>;
     }
   } catch (err) {
     console.error('Failed to load stats:', err);
@@ -64,6 +65,14 @@ function ensureUser(id: number) {
   }
 }
 
+const K = 32;
+function applyElo(a: UserStats, b: UserStats, result: 'white' | 'black' | 'draw') {
+  const ea = 1 / (1 + 10 ** ((b.rating - a.rating) / 400));
+  const sa = result === 'white' ? 1 : result === 'draw' ? 0.5 : 0;
+  a.rating = Math.round(a.rating + K * (sa - ea));
+  b.rating = Math.round(b.rating + K * ((1 - sa) - (1 - ea)));
+}
+
 export function recordResult(
   whiteId: number,
   blackId: number,
@@ -85,15 +94,9 @@ export function recordResult(
       stats[blackId].pvpDraws++;
     }
 
-    const ra = stats[whiteId].rating;
-    const rb = stats[blackId].rating;
-    const ea = 1 / (1 + Math.pow(10, (rb - ra) / 400));
-    const sa = result === 'white' ? 1 : result === 'black' ? 0 : 0.5;
-    const sb = 1 - sa;
-    const eb = 1 / (1 + Math.pow(10, (ra - rb) / 400));
-    stats[whiteId].rating = Math.round(ra + 32 * (sa - ea));
-    stats[blackId].rating = Math.round(rb + 32 * (sb - eb));
+    applyElo(stats[whiteId], stats[blackId], result);
     if (chatId !== undefined) {
+      seenChats.add(chatId);
       if (!stats[whiteId].chats.includes(chatId)) stats[whiteId].chats.push(chatId);
       if (!stats[blackId].chats.includes(chatId)) stats[blackId].chats.push(chatId);
     }
@@ -102,8 +105,11 @@ export function recordResult(
     if (result === 'white') stats[whiteId].soloWins++;
     else if (result === 'black') stats[whiteId].soloLosses++;
     else stats[whiteId].soloDraws++;
-    if (chatId !== undefined && !stats[whiteId].chats.includes(chatId)) {
-      stats[whiteId].chats.push(chatId);
+    if (chatId !== undefined) {
+      seenChats.add(chatId);
+      if (!stats[whiteId].chats.includes(chatId)) {
+        stats[whiteId].chats.push(chatId);
+      }
     }
   }
   saveStats();
@@ -111,7 +117,7 @@ export function recordResult(
 
 export const updateStats = recordResult;
 
-export function getStats(userId: number): PlayerStats {
+export function getStats(userId: number): UserStats {
   ensureUser(userId);
   return stats[userId];
 }

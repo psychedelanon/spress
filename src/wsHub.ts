@@ -3,6 +3,7 @@ import { Chess } from 'chess.js';
 import bestMove from './engine/stockfish';
 import { getGame, updateGame, deleteGame, updateLastDm, games } from './store/db';
 import { ensureHttps } from './utils/ensureHttps';
+import { boardTextFromFEN } from './utils/boardText';
 import { GameSession } from './types';
 
 interface SessionClients {
@@ -72,8 +73,10 @@ export async function sendTurnNotification(gameSession: GameSession, captureInfo
   // 2) Optional personal DM (only if we stored dmChatId and it's different from origin)
   if (player.dmChatId && player.dmChatId !== gameSession.chatId) {
     try {
-      await botInstance.telegram.sendMessage(player.dmChatId, text, { 
-        reply_markup: markup 
+      const boardText = boardTextFromFEN(gameSession.fen);
+      await botInstance.telegram.sendMessage(player.dmChatId, `${text}\n${boardText}`, {
+        parse_mode: 'Markdown',
+        reply_markup: markup
       });
       console.log(`✅ Sent DM to user ${player.id}`);
     } catch (err: any) {

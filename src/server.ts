@@ -8,7 +8,7 @@ import { registerUser } from './store/db';
 import { games, loadGames } from './store/games';
 import { loadStats, saveStatsPeriodically, saveStats, getAllStats } from './store/stats';
 import { log } from './log';
-import { Counter, Registry } from 'prom-client';
+import { Counter, register } from 'prom-client';
 import { t } from './i18n';
 import rateLimit from 'telegraf-ratelimit';
 import cron from 'node-cron';
@@ -245,7 +245,7 @@ process.once('SIGTERM', () => {
 
 http.createServer(async (req, res) => {
   if (req.url === '/metrics') {
-    res.end(await Registry.globalRegistry.metrics());
+    res.end(await register.metrics());
   }
 }).listen(process.env.METRICS_PORT || 9000);
 

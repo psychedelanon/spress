@@ -24,7 +24,6 @@
   "dependencies": {
     "@sentry/node": "^9.35.0",
     "better-sqlite3": "^12.2.0",
-    "chess-image-generator": "^1.0.9",
     "chess.js": "^1.4.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",

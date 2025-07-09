@@ -75,7 +75,18 @@ export const updateLastDm = {
 
 // User registry functions
 export const registerUser = (userId: number, dmChatId: number, username?: string) => {
-  userRegistry[userId] = { dmChatId, username };
+  // Only update dmChatId if it's a private chat (individual DM)
+  // Group chats have negative IDs, private chats have positive IDs
+  if (dmChatId > 0) {
+    userRegistry[userId] = { dmChatId, username };
+  } else {
+    // For group chats, only update username if user doesn't exist yet
+    if (!userRegistry[userId]) {
+      userRegistry[userId] = { dmChatId: 0, username };
+    } else {
+      userRegistry[userId].username = username;
+    }
+  }
 };
 
 export const getUser = (userId: number) => {

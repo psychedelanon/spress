@@ -75,8 +75,8 @@ export async function sendTurnNotification(gameSession: GameSession, captureInfo
     console.error('Failed to notify origin chat:', (err as Error)?.message || err);
   }
 
-  // 2) Optional personal DM (only if we stored dmChatId and it's different from origin)
-  if (player.dmChatId && player.dmChatId !== gameSession.chatId) {
+  // 2) Optional personal DM (only if we stored dmChatId and it's different from origin and is a valid private chat)
+  if (player.dmChatId && player.dmChatId > 0 && player.dmChatId !== gameSession.chatId) {
     try {
       const boardText = boardTextFromFEN(gameSession.fen);
       await botInstance.telegram.sendMessage(player.dmChatId, `${text}\n${boardText}`, {

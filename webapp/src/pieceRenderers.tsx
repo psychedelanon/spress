@@ -1,33 +1,72 @@
-// Simple function-based piece renderers for react-chessboard compatibility
+import React, { useMemo } from 'react';
+
+// Preload chess piece images for better performance
+const PIECE_NAMES = ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP', 'bK', 'bQ', 'bR', 'bB', 'bN', 'bP'];
+
+// Preload images in the background
+const preloadImages = () => {
+  PIECE_NAMES.forEach(pieceName => {
+    const img = new Image();
+    img.src = `/pieces/${pieceName}.svg`;
+  });
+};
+
+// Preload on module load
+if (typeof window !== 'undefined') {
+  preloadImages();
+}
+
+// Memoized piece renderer factory
 const createPieceRenderer = (pieceName: string) => {
-  return ({ squareWidth }: { squareWidth: number }) => {
-    // Correct path for production - pieces are served from public/pieces/
-    const imageUrl = `/pieces/${pieceName}.svg`;
+  return React.memo(({ squareWidth }: { squareWidth: number }) => {
+    // Memoized image source
+    const imageUrl = useMemo(() => `/pieces/${pieceName}.svg`, []);
+    
+    // Memoized styles
+    const imageStyles = useMemo(() => ({
+      width: squareWidth,
+      height: squareWidth,
+      transition: 'transform 0.15s ease-out',
+      pointerEvents: 'none' as const,
+      willChange: 'transform',
+      backfaceVisibility: 'hidden' as const,
+    }), [squareWidth]);
+
+    // Memoized alt text
+    const altText = useMemo(() => {
+      const color = pieceName.charAt(0) === 'w' ? 'White' : 'Black';
+      const piece = pieceName.charAt(1);
+      const pieceNames: Record<string, string> = {
+        'K': 'King', 'Q': 'Queen', 'R': 'Rook', 
+        'B': 'Bishop', 'N': 'Knight', 'P': 'Pawn'
+      };
+      return `${color} ${pieceNames[piece] || piece}`;
+    }, []);
     
     return (
       <img 
         src={imageUrl}
         draggable={false}
-        style={{ 
-          width: squareWidth, 
-          height: squareWidth,
-          transition: 'transform 0.15s ease-out',
-          pointerEvents: 'none',
-        }}
-        alt={`${pieceName.charAt(0) === 'w' ? 'White' : 'Black'} ${pieceName.charAt(1)}`}
+        style={imageStyles}
+        alt={altText}
+        loading="eager"
+        decoding="async"
         onError={(e) => {
           console.error(`❌ Failed to load piece: ${imageUrl}`);
           console.log('Falling back to default pieces');
+          // Fallback to Unicode character or hide
+          const target = e.target as HTMLImageElement;
+          target.style.display = 'none';
         }}
         onLoad={() => {
           console.log(`✅ Successfully loaded: ${imageUrl}`);
         }}
       />
     );
-  };
+  });
 };
 
-// Create custom pieces object for react-chessboard
+// Create memoized custom pieces object for react-chessboard
 export const STABLE_PIECE_RENDERERS = {
   wK: createPieceRenderer('wK'),
   wQ: createPieceRenderer('wQ'),

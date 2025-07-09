@@ -1,8 +1,10 @@
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { Chess } from 'chess.js';
-import Board from './Board';
 import ErrorBoundary from './ErrorBoundary';
 import './App.css';
+
+// Lazy load components
+const Board = lazy(() => import('./Board'));
 
 interface ClientMove {
   from: string;
@@ -19,24 +21,46 @@ interface MovePreview {
   timestamp: number;
 }
 
+interface GameState {
+  fen: string;
+  color: 'w' | 'b';
+  session: string;
+  turn: 'w' | 'b';
+  status: string;
+  isGameOver: boolean;
+  isInCheck: boolean;
+  winner: string | null;
+  isDraw: boolean;
+  isCheckmate: boolean;
+}
+
+// Memoized Unicode chess symbols mapping
+const UNICODE_PIECES: Record<string, string> = {
+  'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+  'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
+};
+
+// Loading component
+const LoadingSpinner = React.memo(() => (
+  <div className="loading">Connecting to game...</div>
+));
+
+// Game Over Overlay component
+const GameOverOverlay = React.memo(({ message }: { message: string }) => (
+  <div className="game-over-overlay">
+    <div className="game-outcome-message">
+      {message}
+    </div>
+  </div>
+));
+
 function App() {
-  const url = new URL(window.location.href);
-  const spectator = url.searchParams.get('spectator') === '1';
-  const replayParam = url.searchParams.get('replay');
+  const url = useMemo(() => new URL(window.location.href), []);
+  const spectator = useMemo(() => url.searchParams.get('spectator') === '1', [url]);
+  const replayParam = useMemo(() => url.searchParams.get('replay'), [url]);
 
   const [socket, setSocket] = useState<WebSocket | null>(null);
-  const [gameState, setGameState] = useState<{
-    fen: string;
-    color: 'w' | 'b';
-    session: string;
-    turn: 'w' | 'b';
-    status: string;
-    isGameOver: boolean;
-    isInCheck: boolean;
-    winner: string | null;
-    isDraw: boolean;
-    isCheckmate: boolean;
-  } | null>(null);
+  const [gameState, setGameState] = useState<GameState | null>(null);
 
   // Move preview state
   const [recentMoves, setRecentMoves] = useState<MovePreview[]>([]);
@@ -46,6 +70,19 @@ function App() {
   const [replayMoves, setReplayMoves] = useState<string[]>([]);
   const [replayIndex, setReplayIndex] = useState(0);
 
+  // Memoized URL parameters
+  const urlParams = useMemo(() => ({
+    session: url.searchParams.get('session'),
+    color: (url.searchParams.get('color') ?? 'w') as 'w' | 'b'
+  }), [url]);
+
+  // Memoized WebSocket URL
+  const wsUrl = useMemo(() => {
+    const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${wsProtocol}://${location.host}/ws`;
+  }, []);
+
+  // Replay keyboard handler
   useEffect(() => {
     if (!replayMoves.length) return;
     const handler = (e: KeyboardEvent) => {
@@ -54,8 +91,9 @@ function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [replayMoves]);
+  }, [replayMoves.length]);
 
+  // Replay state updater
   useEffect(() => {
     if (!replayMoves.length) return;
     const chess = new Chess();
@@ -74,8 +112,9 @@ function App() {
     });
   }, [replayIndex, replayMoves]);
 
-  const sendMove = (move: ClientMove) => {
-    if (moveInFlight.current) return; // dedupe
+  // Optimized move sender
+  const sendMove = useCallback((move: ClientMove) => {
+    if (moveInFlight.current || !socket) return; // dedupe and null check
     
     // Add move preview
     const pieceSymbol = gameState?.fen ? 
@@ -100,12 +139,12 @@ function App() {
       moveData.captureSquare = move.captureSquare;
     }
     
-    socket?.send(JSON.stringify(moveData));
+    socket.send(JSON.stringify(moveData));
     moveInFlight.current = true;
-  };
+  }, [socket, gameState?.fen]);
 
   // Helper to get piece symbol from FEN position
-  const getPieceAt = (fen: string, square: string): string => {
+  const getPieceAt = useCallback((fen: string, square: string): string => {
     try {
       const ranks = fen.split(' ')[0].split('/');
       const file = square.charCodeAt(0) - 97; // a=0, b=1, etc.
@@ -117,7 +156,7 @@ function App() {
           fileIndex += parseInt(char);
         } else {
           if (fileIndex === file) {
-            return convertToUnicodeChessPiece(char);
+            return UNICODE_PIECES[char] || char;
           }
           fileIndex++;
         }
@@ -126,19 +165,10 @@ function App() {
       console.error('Error getting piece at square:', err);
     }
     return '?';
-  };
-
-  // Convert FEN piece letters to Unicode chess symbols
-  const convertToUnicodeChessPiece = (piece: string): string => {
-    const pieces: Record<string, string> = {
-      'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
-      'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
-    };
-    return pieces[piece] || piece;
-  };
+  }, []);
 
   // Extract move info from server updates
-  const extractLastMoveFromUpdate = (oldFen: string | undefined, newFen: string, san: string): { from: string; to: string; piece: string } | null => {
+  const extractLastMoveFromUpdate = useCallback((oldFen: string | undefined, newFen: string, san: string): { from: string; to: string; piece: string } | null => {
     if (!oldFen || !newFen) return null;
     
     try {
@@ -157,7 +187,7 @@ function App() {
         return {
           from: moveMatch[1],
           to: moveMatch[2],
-          piece: convertToUnicodeChessPiece(pieceSymbol)
+          piece: UNICODE_PIECES[pieceSymbol] || pieceSymbol
         };
       }
       
@@ -165,16 +195,16 @@ function App() {
       return {
         from: '??',
         to: san,
-        piece: convertToUnicodeChessPiece(pieceSymbol)
+        piece: UNICODE_PIECES[pieceSymbol] || pieceSymbol
       };
     } catch (err) {
       console.error('Error extracting move:', err);
       return null;
     }
-  };
+  }, []);
 
   // Generate game outcome message
-  const getGameOutcomeMessage = () => {
+  const getGameOutcomeMessage = useCallback(() => {
     if (!gameState?.isGameOver) return null;
     
     if (gameState.isDraw) {
@@ -186,13 +216,113 @@ function App() {
     }
     
     return 'Game Over';
-  };
+  }, [gameState?.isGameOver, gameState?.isDraw, gameState?.isCheckmate, gameState?.winner]);
 
+  // Memoized WebSocket message handler
+  const handleMessage = useCallback((event: MessageEvent) => {
+    console.log('🐛 Raw WebSocket data:', event.data);
+    const msg = JSON.parse(event.data);
+    console.log('🐛 Parsed WebSocket message:', msg);
+    console.log('🐛 Message FEN field:', msg.fen);
+    console.log('🐛 FEN type:', typeof msg.fen);
+    console.log('🐛 FEN length:', msg.fen ? msg.fen.length : 'undefined');
+    
+    // 1️⃣ Any message that carries a fresh position should update state
+    const carriesFen = 
+      msg.type === 'update' ||
+      msg.type === 'session' ||      // first handshake for solo games
+      msg.type === 'fen' ||          // some back-ends label it like this
+      msg.type === 'init';           // previous naming
+
+    if (carriesFen) {
+      // Reset move deduplication flag
+      moveInFlight.current = false;
+
+      // Track moves from server updates (including opponent moves)
+      if (msg.san && gameState?.fen !== msg.fen) {
+        // Extract the move that was just made by comparing positions
+        const lastMove = extractLastMoveFromUpdate(gameState?.fen, msg.fen, msg.san);
+        if (lastMove) {
+          const movePreview: MovePreview = {
+            from: lastMove.from,
+            to: lastMove.to,
+            piece: lastMove.piece,
+            timestamp: Date.now()
+          };
+          setRecentMoves(prev => [movePreview, ...prev.slice(0, 4)]);
+        }
+      }
+
+      const isGameOver = !!msg.winner || !!msg.isDraw;
+      const winner = msg.winner;
+      const isDraw = msg.isDraw || false;
+      const isCheckmate = msg.isCheckmate || false;
+      const isInCheck = msg.isInCheck || false;
+      
+      let status = 'Playing';
+      if (isGameOver) {
+        if (isDraw) {
+          status = 'Draw';
+        } else if (winner) {
+          status = `Game Over - ${winner} wins!`;
+        } else {
+          status = 'Game Over';
+        }
+      }
+
+      const finalFen = msg.fen || 'start';
+      console.log('🐛 Processing FEN:', msg.fen);
+      console.log('🐛 FEN split test:', msg.fen ? msg.fen.split(' ') : 'no fen');
+      const finalTurn = msg.turn || (msg.fen ? msg.fen.split(' ')[1] : 'w');
+      console.log('🐛 Final FEN:', finalFen);
+      console.log('🐛 Final turn:', finalTurn);
+      
+      console.log('🐛 Setting game state:', {
+        fen: finalFen,
+        turn: finalTurn,
+        color: urlParams.color,
+        session: urlParams.session,
+        isGameOver,
+        isInCheck,
+        msgType: msg.type,
+        rawMsg: msg
+      });
+
+      // TEMPORARY FIX: Force correct starting FEN for testing
+      const correctedFen = finalFen === 'start' ? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' : finalFen;
+      console.log('🐛 Using corrected FEN:', correctedFen);
+
+      setGameState({
+        fen: correctedFen,
+        color: urlParams.color,
+        session: urlParams.session || 'unknown',
+        turn: finalTurn as 'w' | 'b',
+        status,
+        isGameOver,
+        isInCheck,
+        winner,
+        isDraw,
+        isCheckmate
+      });
+      return;
+    }
+
+    // 2️⃣ Messages that don't carry a position
+    if (msg.type === 'invalid' || msg.type === 'error') {
+      moveInFlight.current = false;
+      console.log('Invalid move or error:', msg);
+    }
+    
+    // 3️⃣ Session expired/corrupted - show user-friendly message
+    if (msg.type === 'session_expired' || msg.type === 'session_corrupted') {
+      console.error('Session issue:', msg);
+      alert(msg.error + '\n\nPlease go back to Telegram and start a new game.');
+      return;
+    }
+  }, [gameState?.fen, urlParams.color, urlParams.session, extractLastMoveFromUpdate]);
+
+  // Main WebSocket connection effect
   useEffect(() => {
-    // Get URL parameters
-    const session = url.searchParams.get('session');
-    const color = (url.searchParams.get('color') ?? 'w') as 'w' | 'b';
-
     if (replayParam) {
       try {
         const pgn = atob(replayParam);
@@ -217,14 +347,13 @@ function App() {
       return;
     }
     
-    if (!session) {
+    if (!urlParams.session) {
       console.error('No session ID provided');
       return;
     }
 
     // Create WebSocket connection
-    const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${wsProtocol}://${location.host}/ws?session=${session}&color=${color}`);
+    const ws = new WebSocket(`${wsUrl}?session=${urlParams.session}&color=${urlParams.color}`);
     
     ws.onopen = () => {
       console.log('🔌 WebSocket connected');
@@ -238,108 +367,6 @@ function App() {
           clearInterval(keepAlive);
         }
       }, 30000);
-    };
-
-    const handleMessage = (event: MessageEvent) => {
-      console.log('🐛 Raw WebSocket data:', event.data);
-      const msg = JSON.parse(event.data);
-      console.log('🐛 Parsed WebSocket message:', msg);
-      console.log('🐛 Message FEN field:', msg.fen);
-      console.log('🐛 FEN type:', typeof msg.fen);
-      console.log('🐛 FEN length:', msg.fen ? msg.fen.length : 'undefined');
-      
-      // 1️⃣ Any message that carries a fresh position should update state
-      const carriesFen = 
-        msg.type === 'update' ||
-        msg.type === 'session' ||      // first handshake for solo games
-        msg.type === 'fen' ||          // some back-ends label it like this
-        msg.type === 'init';           // previous naming
-
-      if (carriesFen) {
-        // Reset move deduplication flag
-        moveInFlight.current = false;
-
-        // Track moves from server updates (including opponent moves)
-        if (msg.san && gameState?.fen !== msg.fen) {
-          // Extract the move that was just made by comparing positions
-          const lastMove = extractLastMoveFromUpdate(gameState?.fen, msg.fen, msg.san);
-          if (lastMove) {
-            const movePreview: MovePreview = {
-              from: lastMove.from,
-              to: lastMove.to,
-              piece: lastMove.piece,
-              timestamp: Date.now()
-            };
-            setRecentMoves(prev => [movePreview, ...prev.slice(0, 4)]);
-          }
-        }
-
-        const isGameOver = !!msg.winner || !!msg.isDraw;
-        const winner = msg.winner;
-        const isDraw = msg.isDraw || false;
-        const isCheckmate = msg.isCheckmate || false;
-        const isInCheck = msg.isInCheck || false;
-        
-        let status = 'Playing';
-        if (isGameOver) {
-          if (isDraw) {
-            status = 'Draw';
-          } else if (winner) {
-            status = `Game Over - ${winner} wins!`;
-          } else {
-            status = 'Game Over';
-          }
-        }
-
-        const finalFen = msg.fen || 'start';
-        console.log('🐛 Processing FEN:', msg.fen);
-        console.log('🐛 FEN split test:', msg.fen ? msg.fen.split(' ') : 'no fen');
-        const finalTurn = msg.turn || (msg.fen ? msg.fen.split(' ')[1] : 'w');
-        console.log('🐛 Final FEN:', finalFen);
-        console.log('🐛 Final turn:', finalTurn);
-        
-        console.log('🐛 Setting game state:', {
-          fen: finalFen,
-          turn: finalTurn,
-          color,
-          session,
-          isGameOver,
-          isInCheck,
-          msgType: msg.type,
-          rawMsg: msg
-        });
-
-        // TEMPORARY FIX: Force correct starting FEN for testing
-        const correctedFen = finalFen === 'start' ? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' : finalFen;
-        console.log('🐛 Using corrected FEN:', correctedFen);
-
-        setGameState({
-          fen: correctedFen,
-          color,
-          session,
-          turn: finalTurn as 'w' | 'b',
-          status,
-          isGameOver,
-          isInCheck,
-          winner,
-          isDraw,
-          isCheckmate
-        });
-        return;
-      }
-
-      // 2️⃣ Messages that don't carry a position
-      if (msg.type === 'invalid' || msg.type === 'error') {
-        moveInFlight.current = false;
-        console.log('Invalid move or error:', msg);
-      }
-      
-      // 3️⃣ Session expired/corrupted - show user-friendly message
-      if (msg.type === 'session_expired' || msg.type === 'session_corrupted') {
-        console.error('Session issue:', msg);
-        alert(msg.error + '\n\nPlease go back to Telegram and start a new game.');
-        return;
-      }
     };
 
     ws.addEventListener('message', handleMessage);
@@ -365,13 +392,30 @@ function App() {
       ws.removeEventListener('message', handleMessage);
       ws.close();
     };
-  }, []);
+  }, [replayParam, urlParams.session, urlParams.color, wsUrl, handleMessage]);
 
+  // Memoized game outcome message
+  const gameOutcomeMessage = useMemo(() => getGameOutcomeMessage(), [getGameOutcomeMessage]);
+
+  // Memoized instruction text
+  const instructionText = useMemo(() => {
+    if (!gameState) return '';
+    
+    if (gameState.isGameOver) {
+      return 'Game finished';
+    }
+    
+    return gameState.turn === gameState.color ? 
+      'Your turn - drag pieces to move!' : 
+      'Waiting for opponent...';
+  }, [gameState?.isGameOver, gameState?.turn, gameState?.color]);
+
+  // Loading state
   if (!socket || !gameState) {
     return (
       <div className="app-container">
         <h1 className="title">SPRESS Chess</h1>
-        <div className="loading">Connecting to game...</div>
+        <LoadingSpinner />
       </div>
     );
   }
@@ -411,36 +455,28 @@ function App() {
         
         <div className={`board-wrapper ${gameState.isCheckmate ? 'checkmate' : ''}`}>
           <ErrorBoundary>
-            <Board
-              fen={gameState.fen}
-              turn={gameState.turn}
-              isGameOver={gameState.isGameOver}
-              isInCheck={gameState.isInCheck}
-              color={gameState.color}
-              onMoveAttempt={sendMove}
-              readOnly={spectator || replayMoves.length > 0}
-            />
+            <Suspense fallback={<LoadingSpinner />}>
+              <Board
+                fen={gameState.fen}
+                turn={gameState.turn}
+                isGameOver={gameState.isGameOver}
+                isInCheck={gameState.isInCheck}
+                color={gameState.color}
+                onMoveAttempt={sendMove}
+                readOnly={spectator || replayMoves.length > 0}
+              />
+            </Suspense>
           </ErrorBoundary>
         </div>
       </div>
       
       <div className="instructions">
-        {gameState.isGameOver ? 
-          'Game finished' :
-          (gameState.turn === gameState.color ? 
-            'Your turn - drag pieces to move!' : 
-            'Waiting for opponent...'
-          )
-        }
+        {instructionText}
       </div>
 
       {/* Game Outcome Overlay */}
-      {gameState.isGameOver && (
-        <div className="game-over-overlay">
-          <div className="game-outcome-message">
-            {getGameOutcomeMessage()}
-          </div>
-        </div>
+      {gameState.isGameOver && gameOutcomeMessage && (
+        <GameOverOverlay message={gameOutcomeMessage} />
       )}
     </div>
   );

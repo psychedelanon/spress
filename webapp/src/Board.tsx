@@ -1,5 +1,6 @@
+import React from 'react';
 import { Chessboard } from 'react-chessboard';
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Chess } from 'chess.js';
 import { STABLE_PIECE_RENDERERS } from './pieceRenderers';
 
@@ -21,13 +22,13 @@ type Props = {
   readOnly?: boolean;
 };
 
-// Capture Toast Component
+// Capture Toast Component - memoized for performance
 interface CaptureToastProps {
   message: string;
   onDismiss: () => void;
 }
 
-function CaptureToast({ message, onDismiss }: CaptureToastProps) {
+const CaptureToast = React.memo(({ message, onDismiss }: CaptureToastProps) => {
   useEffect(() => {
     const timer = setTimeout(onDismiss, 2000);
     return () => clearTimeout(timer);
@@ -38,13 +39,22 @@ function CaptureToast({ message, onDismiss }: CaptureToastProps) {
       {message}
     </div>
   );
-}
+});
 
-export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveAttempt, readOnly }: Props) {
+// Memoized piece name mapping
+const PIECE_NAMES: Record<string, string> = {
+  'p': 'Pawn', 'r': 'Rook', 'n': 'Knight', 
+  'b': 'Bishop', 'q': 'Queen', 'k': 'King'
+};
+
+const Board = React.memo(({ fen, turn, isGameOver, isInCheck, color, onMoveAttempt, readOnly }: Props) => {
   console.log('🎯 Board props:', { fen, turn, color });
   
   // SUPER SAFE FEN - always use starting position if anything looks wrong
-  const safeFen = (fen && fen !== 'start' && fen.length > 20) ? fen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  const safeFen = useMemo(() => {
+    return (fen && fen !== 'start' && fen.length > 20) ? fen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  }, [fen]);
+  
   console.log('🎯 Using safe FEN:', safeFen);
 
   // Chess.js instance for move validation and highlighting
@@ -63,9 +73,33 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
   // UI state for delightful effects
   const [captureFlashSquare, setCaptureFlashSquare] = useState<string | null>(null);
   const [captureToast, setCaptureToast] = useState<string | null>(null);
+  const [moveSquares, setMoveSquares] = useState<Record<string, React.CSSProperties>>({});
+  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   
   // Mobile drag/tap conflict prevention
   const isDragging = useRef(false);
+
+  // Memoized board width calculation
+  const boardWidth = useMemo(() => {
+    return Math.min(window.innerWidth - 40, 480);
+  }, []);
+
+  // Memoized board styles
+  const boardStyles = useMemo(() => ({
+    borderRadius: '8px',
+    border: '4px solid #E01313',
+    transition: 'transform 0.15s ease-out',
+    boxShadow: '0 4px 20px rgba(224, 19, 19, 0.3)'
+  }), []);
+
+  // Memoized square styles
+  const customSquareStyles = useMemo(() => ({
+    backgroundColor: '#0053FF'
+  }), []);
+
+  const customLightSquareStyle = useMemo(() => ({
+    backgroundColor: '#FFD700'
+  }), []);
 
   // Only allow dragging of our own pieces
   const isDraggablePiece = useCallback(
@@ -75,42 +109,6 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
     },
     [turn, color, isGameOver]
   );
-
-  // Use the stable piece renderers - this reference NEVER changes
-  const customPieces = STABLE_PIECE_RENDERERS;
-
-  // Debug logging and piece testing
-  useEffect(() => {
-    console.log('[DEBUG] customPieces created:', Object.keys(customPieces));
-    console.log('[DEBUG] Sample piece function:', customPieces.wK);
-    
-    // Test if piece files are accessible
-    const testImg = new Image();
-    testImg.onload = () => {
-      console.log('[DEBUG] ✅ wK.svg loaded successfully');
-      console.log('[DEBUG] Image dimensions:', testImg.width, 'x', testImg.height);
-    };
-    testImg.onerror = (error) => {
-      console.log('[DEBUG] ❌ wK.svg failed to load - check file path');
-      console.error('[DEBUG] Error details:', error);
-      
-      // Try fetching directly to get more info
-      fetch(`${import.meta.env.BASE_URL}pieces/wK.svg`)
-        .then(response => {
-          console.log('[DEBUG] Fetch response status:', response.status);
-          console.log('[DEBUG] Content-Type:', response.headers.get('content-type'));
-          return response.text();
-        })
-        .then(svgText => {
-          console.log('[DEBUG] SVG content length:', svgText.length);
-          console.log('[DEBUG] SVG starts with:', svgText.substring(0, 100));
-        })
-        .catch(fetchError => {
-          console.error('[DEBUG] Fetch error:', fetchError);
-        });
-    };
-    testImg.src = `${import.meta.env.BASE_URL}pieces/wK.svg`;
-  }, []); // Empty dependency array since STABLE_PIECE_RENDERERS never changes
 
   // Clear UI state when game updates (for server captures)
   useEffect(() => {
@@ -158,7 +156,7 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
       
       // Handle capture flash UI only (based on the validated move)
       if (move.captured) {
-        const capturedPieceName = pieceNames[move.captured.toLowerCase()] || 'Piece';
+        const capturedPieceName = PIECE_NAMES[move.captured.toLowerCase()] || 'Piece';
         const capturingColor = move.color === 'w' ? 'White' : 'Black';
         
         // Flash the destination square
@@ -177,7 +175,7 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
         from: sourceSquare,
         to: targetSquare,
         promotion: 'q',
-        captured: move.captured ? pieceNames[move.captured.toLowerCase()] || 'Piece' : undefined,
+        captured: move.captured ? PIECE_NAMES[move.captured.toLowerCase()] || 'Piece' : undefined,
         captureSquare: move.captured ? targetSquare : undefined
       });
       
@@ -186,16 +184,6 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
     },
     [turn, color, isGameOver, onMoveAttempt],
   );
-
-  /* ───────────────────────────────────────────────────────── square styles */
-  const [moveSquares, setMoveSquares] = useState<Record<string, React.CSSProperties>>({});
-  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
-
-  // Piece name mapping for capture messages
-  const pieceNames: Record<string, string> = {
-    'p': 'Pawn', 'r': 'Rook', 'n': 'Knight', 
-    'b': 'Bishop', 'q': 'Queen', 'k': 'King'
-  };
 
   // Show legal moves for a square - works for ANY piece to show what's possible
   const highlightLegalMoves = useCallback((square: string) => {
@@ -317,7 +305,7 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
           if (move.captured) {
             setCaptureFlashSquare(square);
             setTimeout(() => setCaptureFlashSquare(null), 400);
-            setCaptureToast(`💥 ${color === 'w' ? 'White' : 'Black'} captured a ${pieceNames[move.captured.toLowerCase()] || 'piece'}!`);
+            setCaptureToast(`💥 ${color === 'w' ? 'White' : 'Black'} captured a ${PIECE_NAMES[move.captured.toLowerCase()] || 'piece'}!`);
           }
 
           // Send move to server
@@ -342,7 +330,7 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
       setSelectedSquare(null);
       setMoveSquares({});
     }
-  }, [turn, color, isGameOver, selectedSquare, moveSquares, highlightLegalMoves, onMoveAttempt, pieceNames]);
+  }, [turn, color, isGameOver, selectedSquare, moveSquares, highlightLegalMoves, onMoveAttempt]);
 
   // Mouse hover for move previews
   const onMouseOverSquare = useCallback((square: string) => {
@@ -357,6 +345,11 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
     }
   }, [selectedSquare]);
 
+  // Memoize capture toast dismissal
+  const dismissCaptureToast = useCallback(() => {
+    setCaptureToast(null);
+  }, []);
+
   return (
     <div className="board-container">
       <Chessboard
@@ -369,17 +362,11 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
         onMouseOutSquare={readOnly ? undefined : onMouseOutSquare}
         customSquareStyles={getCustomSquareStyles()}
         customPieces={STABLE_PIECE_RENDERERS}
-
         animationDuration={150}
-        boardWidth={Math.min(window.innerWidth - 40, 480)}
-        customDarkSquareStyle={{ backgroundColor: '#0053FF' }}   // SPRESS blue
-        customLightSquareStyle={{ backgroundColor: '#FFD700' }}  // SPRESS yellow
-        customBoardStyle={{
-          borderRadius: '8px',
-          border: '4px solid #E01313',
-          transition: 'transform 0.15s ease-out',
-          boxShadow: '0 4px 20px rgba(224, 19, 19, 0.3)'
-        }}
+        boardWidth={boardWidth}
+        customDarkSquareStyle={customSquareStyles}
+        customLightSquareStyle={customLightSquareStyle}
+        customBoardStyle={boardStyles}
         arePiecesDraggable={!readOnly && turn === color && !isGameOver}
         isDraggablePiece={isDraggablePiece}
       />
@@ -388,9 +375,13 @@ export default function Board({ fen, turn, isGameOver, isInCheck, color, onMoveA
       {captureToast && (
         <CaptureToast 
           message={captureToast}
-          onDismiss={() => setCaptureToast(null)}
+          onDismiss={dismissCaptureToast}
         />
       )}
     </div>
   );
-} 
+});
+
+Board.displayName = 'Board';
+
+export default Board; 

@@ -86,10 +86,6 @@ export async function handleSoloGame(ctx: Context) {
     return ctx.reply('Finish or /resign your current game first.');
   }
 
-  if (Array.from(games.values()).some(g => !g.winner && g.chatId === chatId && (g.players.w.id === userId || g.players.b.id === userId))) {
-    return ctx.reply('Finish or /resign your current game first.');
-  }
-
   const parts = ('text' in ctx.message ? ctx.message.text.split(' ') : []);
   const arg = parts[1];
   let level: number | null = null;

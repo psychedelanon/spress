@@ -1,4 +1,6 @@
 {
   "help": "SPRESS Chess Commands:\n/new @opponent - Start a new game\n/solo - Play vs AI\n/resign - Resign current game\n/stats - Show your stats",
-  "leaderboard": "🏆 Leaderboard"
+  "leaderboard": "🏆 Leaderboard",
+  "challengeTimeout": "Challenge timed out.",
+  "statsHeader": "\ud83c\udfc5 Your Stats"
 }

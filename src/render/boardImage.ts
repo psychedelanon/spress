@@ -1,10 +1,12 @@
 // Make canvas dependency optional during build
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let ChessImageGenerator: any = null;
 
 // Try to load the dependency dynamically
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   ChessImageGenerator = require('chess-image-generator');
-} catch (error) {
+} catch {
   console.warn('chess-image-generator not available, board image generation will be disabled');
 }
 

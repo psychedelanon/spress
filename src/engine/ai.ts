@@ -1,7 +1,6 @@
 import { Chess } from 'chess.js';
 
-// Placeholder AI engine - will be implemented later
-let engine: any = null;
+// Placeholder for future AI engine
 
 // Piece values for evaluation
 const PIECE_VALUES = {

@@ -14,3 +14,5 @@ describe('stats', () => {
     expect(getStats(1).rating).toBeGreaterThan(getStats(2).rating);
   });
 });
+
+export {};

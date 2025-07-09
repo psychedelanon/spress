@@ -216,23 +216,33 @@ export async function handleNewGame(ctx: Context) {
   setTimeout(() => expireChallenge(sessionId), 5 * 60 * 1000);
 }
 
-// Handle text messages - block chess moves, redirect to board
+// Handle text messages - only respond to potential chess moves or meaningful interactions
 export function handleMove(ctx: Context) {
   const message = ctx.message;
   if (!message || !('text' in message) || !ctx.from) return;
 
-  const text = message.text;
+  const text = message.text.trim();
   
   // Allow commands to pass through
   if (text.startsWith('/')) return;
   
-  // Register user for DM capability
+  // Register user for DM capability (silently)
   if (ctx.chat) {
     registerUser(ctx.from.id, ctx.chat.id, ctx.from.username);
   }
   
-  // Block all other text and redirect to board
-  return ctx.reply('♟️ Please open the SPRESS board and move pieces there ↗️');
+  // Only respond to text that looks like potential chess moves or game-related queries
+  const chessPattern = /^[a-h][1-8][a-h][1-8][qrnb]?$/i; // Standard chess notation like "e2e4"
+  const algebraicPattern = /^[NBRQK]?[a-h]?[1-8]?[x]?[a-h][1-8][+#]?$/i; // Algebraic notation like "Nf3"
+  const gameKeywords = /(board|move|game|position|help|resign|status|turn)/i;
+  
+  // Only respond if it looks like a chess move or contains game-related keywords
+  if (chessPattern.test(text) || algebraicPattern.test(text) || gameKeywords.test(text)) {
+    return ctx.reply('♟️ Please open the SPRESS board and move pieces there ↗️');
+  }
+  
+  // For all other text, don't respond - let it be a normal conversation
+  return;
 }
 
 // /resign command handler

@@ -122,6 +122,10 @@ export async function handleSoloGame(ctx: Context) {
   // Register user for DM capability
   registerUser(userId, chatId, username);
 
+  // Get the proper DM chat ID for the user
+  const user = getUser(userId);
+  const userDmChatId = user?.dmChatId || 0;
+
   const sessionId = `solo-${userId}-${Date.now()}`;
   
   // Create new game session with proper structure
@@ -136,7 +140,7 @@ export async function handleSoloGame(ctx: Context) {
       w: {
         id: userId,
         username,
-        dmChatId: chatId,
+        dmChatId: userDmChatId,
         color: 'w'
       },
       b: {
@@ -188,6 +192,10 @@ export async function handleNewGame(ctx: Context) {
 
   registerUser(userId, chatId, username);
 
+  // Get the proper DM chat ID for the challenger
+  const challengerUser = getUser(userId);
+  const challengerDmChatId = challengerUser?.dmChatId || 0;
+
   const sessionId = generateSessionId(userId, opponentId || Date.now());
 
   const message = await ctx.reply(`@${opponentUsername}, you have been challenged to a game!`, {
@@ -199,7 +207,7 @@ export async function handleNewGame(ctx: Context) {
   pendingChallenges.set(sessionId, {
     sessionId,
     chatId,
-    challenger: { id: userId, username, dmChatId: chatId, color: 'w' },
+    challenger: { id: userId, username, dmChatId: challengerDmChatId, color: 'w' },
     opponent: { id: opponentId, username: opponentUsername },
     messageId: message.message_id,
     telegram: ctx.telegram
@@ -374,6 +382,10 @@ export async function handleCallbackQuery(ctx: Context) {
 
     registerUser(ctx.from.id, ctx.chat?.id || challenge.chatId, ctx.from.username);
 
+    // Get the proper DM chat ID for the accepting user
+    const acceptingUser = getUser(ctx.from.id);
+    const acceptingUserDmChatId = acceptingUser?.dmChatId || 0;
+
     const gameSession: NewGameSession = {
       id: sessionId,
       chatId: challenge.chatId,
@@ -386,7 +398,7 @@ export async function handleCallbackQuery(ctx: Context) {
         b: {
           id: challenge.opponent.id!,
           username: challenge.opponent.username,
-          dmChatId: ctx.chat?.id,
+          dmChatId: acceptingUserDmChatId,
           color: 'b'
         }
       }
@@ -429,15 +441,19 @@ export async function handleCallbackQuery(ctx: Context) {
       }
     );
 
-    // Send DM to both players with their board links
+    // Send DM to both players with their board links (only if they have DM capability)
     const boardText = boardTextFromFEN(gameSession.fen);
-    if (challenge.challenger.dmChatId) {
+    
+    // Send DM to challenger (white) if they have DM capability
+    if (challenge.challenger.dmChatId && challenge.challenger.dmChatId > 0) {
       await ctx.telegram.sendMessage(challenge.challenger.dmChatId,
         `Game vs @${challenge.opponent.username} started. You are White.\n${boardText}`,
         { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: 'Open board', web_app: { url: whiteUrl } }]] } }
       ).catch(() => {});
     }
-    if (gameSession.players.b.dmChatId && gameSession.players.b.dmChatId !== challenge.chatId) {
+    
+    // Send DM to accepting player (black) if they have DM capability
+    if (gameSession.players.b.dmChatId && gameSession.players.b.dmChatId > 0) {
       await ctx.telegram.sendMessage(gameSession.players.b.dmChatId!,
         `Game vs @${challenge.challenger.username} started. You are Black.\n${boardText}`,
         { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: 'Open board', web_app: { url: blackUrl } }]] } }

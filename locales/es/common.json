@@ -1,4 +1,6 @@
 {
-  "help": "Comandos de SPRESS:\n/new @opponent - Nueva partida\n/solo - Jugar vs IA\n/resign - Rendirse\n/stats - Tus estad\u00edsticas",
-  "leaderboard": "🏆 Tabla"
+  "help": "Comandos de SPRESS:\n/new @opponent - Nueva partida\n/solo - Jugar vs IA\n/resign - Rendirse\n/stats - Tus est\u00e1disticas",
+  "leaderboard": "🏆 Tabla",
+  "challengeTimeout": "Desaf\u00edo expirado.",
+  "statsHeader": "\ud83c\udfc5 Tus estad\u00edsticas"
 }

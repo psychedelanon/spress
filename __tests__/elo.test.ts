@@ -6,3 +6,5 @@ it('increases winner rating', () => {
   expect(getStats(1).rating).toBeGreaterThan(1000);
   expect(getStats(2).rating).toBeLessThan(1000);
 });
+
+export {};

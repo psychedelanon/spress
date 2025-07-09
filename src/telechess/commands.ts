@@ -1,17 +1,18 @@
 import { Context } from 'telegraf';
 import { InlineKeyboardMarkup } from 'telegraf/types';
-import { GameSession, Player } from './GameSession';
+// Import GameSession types for potential future use
 import { ensureHttps } from '../utils/ensureHttps';
 import { boardTextFromFEN } from '../utils/boardText';
 import { fenToPng } from '../render/boardImage';
 import { registerUser, getUser } from '../store/db';
 import { insertGame, games, deleteGame } from '../store/games';
 import { GameSession as NewGameSession, PlayerInfo } from '../types';
-import { getStats, recordResult } from '../store/stats';
+import { getStats, recordResult, getAllStats, seenChats } from '../store/stats';
 import { t } from '../i18n';
 import { userPrefs } from '../server';
 
-const WEBAPP_URL = `${ensureHttps(process.env.PUBLIC_URL || 'localhost:3000')}/webapp/`;
+const WEBAPP_URL = process.env.WEBAPP_URL ||
+  `${ensureHttps(process.env.PUBLIC_URL || 'localhost:3000')}/webapp/`;
 
 // Pending PvP challenges waiting for acceptance
 interface PendingChallenge {
@@ -34,7 +35,13 @@ let lastPng: Buffer = Buffer.alloc(0);
 function expireChallenge(id: string) {
   const c = pendingChallenges.get(id);
   if (!c) return;
-  c.telegram.editMessageText(c.chatId, c.messageId, undefined, 'Challenge timed out.').catch(() => {});
+  const lang = userPrefs[c.challenger.id]?.lang || 'en';
+  c.telegram.editMessageText(
+    c.chatId,
+    c.messageId,
+    undefined,
+    t('challengeTimeout', { lng: lang })
+  ).catch(() => {});
   pendingChallenges.delete(id);
 }
 
@@ -45,6 +52,7 @@ function generateSessionId(player1Id: number, player2Id: number): string {
 }
 
 // Helper function to create inline keyboard with Mini App button
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function createGameKeyboard(sessionId: string, playerColor: 'w' | 'b'): InlineKeyboardMarkup {
   const base = ensureHttps(process.env.PUBLIC_URL || 'localhost:3000');
   const url = `${base}/webapp/?session=${sessionId}&color=${playerColor}`;
@@ -151,10 +159,10 @@ export async function handleSoloGame(ctx: Context) {
   
   await ctx.reply('🤖 Solo Mode - You vs AI', {
     reply_markup: {
-      inline_keyboard: [[{
-        text: '🤖 Play Solo',
-        web_app: { url }
-      }]]
+      inline_keyboard: [
+        [{ text: '🤖 Play Solo', web_app: { url } }],
+        [{ text: '👀 Watch', callback_data: `spectate_${sessionId}` }]
+      ]
     }
   });
 }
@@ -313,7 +321,7 @@ export async function handleCallbackQuery(ctx: Context) {
         lastFen = fen;
       }
       await ctx.replyWithPhoto({ source: lastPng }, { caption: `Turn: ${game.fen.split(' ')[1] === 'w' ? 'White' : 'Black'}` });
-    } catch (err) {
+    } catch {
       const boardText = boardTextFromFEN(fen);
       await ctx.reply(`\u26a0\ufe0f Failed to render board, falling back:\n${boardText}`, { parse_mode: 'Markdown' });
     }
@@ -344,12 +352,6 @@ export async function handleCallbackQuery(ctx: Context) {
   } else if (data.startsWith('resign_')) {
     handleResign(ctx);
     ctx.answerCbQuery();
-
-  } else if (data.startsWith('spectate_')) {
-    const id = data.replace('spectate_', '');
-    const url = `${WEBAPP_URL}?id=${id}&spectator=1`;
-    await ctx.answerCbQuery();
-    await ctx.reply(`Watch live: ${url}`);
 
   } else if (data.startsWith('accept_')) {
     const sessionId = data.replace('accept_', '');
@@ -445,6 +447,7 @@ export async function handleCallbackQuery(ctx: Context) {
 
   } else if (data === 'solo_easy' || data === 'solo_med' || data === 'solo_hard') {
     const level = data === 'solo_easy' ? 2 : data === 'solo_med' ? 10 : 15;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await handleSoloGame(Object.assign(ctx, { message: { text: `/solo ${level}` } }) as any);
     ctx.answerCbQuery();
   } else if (data.startsWith('help_')) {
@@ -464,21 +467,20 @@ export async function handleCallbackQuery(ctx: Context) {
 export function handleStats(ctx: Context) {
   if (!ctx.from) return;
   const s = getStats(ctx.from.id);
+  const lang = userPrefs[ctx.from.id]?.lang || 'en';
   const msg =
-    `🏅 Your Stats:\n` +
+    `${t('statsHeader', { lng: lang })}\n` +
     `PvP - ${s.pvpWins}W/${s.pvpLosses}L/${s.pvpDraws}D\n` +
     `Solo - ${s.soloWins}W/${s.soloLosses}L/${s.soloDraws}D`;
   ctx.reply(msg);
 }
 
 export function handleLeaderboard(ctx: Context) {
-  const statsMod = require('../store/stats') as typeof import('../store/stats');
-  const { seenChats } = statsMod;
   const chatId = ctx.chat.id;
-  const all = Object.entries(statsMod.getAllStats());
+  const all = Object.entries(getAllStats());
   const top = all
-    .filter(([_, s]) => seenChats.has(chatId) && (s.chats || []).includes(chatId))
-    .map(([id, s]) => ({ id: Number(id), rating: s.rating }))
+    .filter(([ , s]) => seenChats.has(chatId) && (s.chats || []).includes(chatId))
+    .map(([idStr, s]) => ({ id: Number(idStr), rating: s.rating }))
     .sort((a, b) => b.rating - a.rating)
     .slice(0, 10);
   if (top.length === 0) return ctx.reply('No games played yet');
@@ -491,6 +493,14 @@ export function handleLeaderboard(ctx: Context) {
   ctx.reply(`${t('leaderboard', { lng: lang })}\n<pre>${lines.join('\n')}</pre>`, { parse_mode: 'HTML' });
 }
 
+export function registerSpectateHandler(bot: import('telegraf').Telegraf) {
+  bot.action(/^spectate_(.+)/, async ctx => {
+    const id = ctx.match[1];
+    const url = `${WEBAPP_URL}?id=${id}&spectator=1`;
+    await ctx.answerCbQuery();
+    await ctx.reply(`Watch live: ${url}`);
+  });
+}
+
 // Export bot configuration function
-export function configureTelegramBot() {
-} 
+export function configureTelegramBot() {} 

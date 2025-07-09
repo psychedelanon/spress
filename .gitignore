@@ -6,4 +6,5 @@ node_modules/
 *.tsbuildinfo
 /dist/
 src/store/stats.json
+src/store/*.db
 

@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { Chess } from 'chess.js';
+import type { Telegraf } from 'telegraf';
 import bestMove from './engine/stockfish';
 import { updateGame, deleteGame, games } from './store/games';
 import { ensureHttps } from './utils/ensureHttps';
@@ -14,9 +15,13 @@ interface SessionClients {
 
 const sessions = new Map<string, SessionClients>();
 
+interface PlayerSocket extends WebSocket {
+  playerColor?: 'w' | 'b';
+}
+
 // Import bot instance for sending notifications
-let botInstance: any = null;
-export function setBotInstance(bot: any) {
+let botInstance: Telegraf | null = null;
+export function setBotInstance(bot: Telegraf) {
   botInstance = bot;
 }
 
@@ -31,7 +36,6 @@ export async function sendTurnNotification(gameSession: GameSession, captureInfo
 
   const turnColor: 'w' | 'b' = gameSession.fen.split(' ')[1] as 'w' | 'b';
   const player = gameSession.players[turnColor];
-  const otherPlayer = gameSession.players[turnColor === 'w' ? 'b' : 'w'];
 
   // Skip DM notifications for AI players
   if (player.isAI) {
@@ -67,8 +71,8 @@ export async function sendTurnNotification(gameSession: GameSession, captureInfo
       reply_markup: markup 
     });
     console.log(`✅ Notified origin chat ${gameSession.chatId}`);
-  } catch (err: any) {
-    console.error('Failed to notify origin chat:', err?.description || err);
+  } catch (err) {
+    console.error('Failed to notify origin chat:', (err as Error)?.message || err);
   }
 
   // 2) Optional personal DM (only if we stored dmChatId and it's different from origin)
@@ -80,12 +84,14 @@ export async function sendTurnNotification(gameSession: GameSession, captureInfo
         reply_markup: markup
       });
       console.log(`✅ Sent DM to user ${player.id}`);
-    } catch (err: any) {
+    } catch (err) {
       // Ignore 400 here – user might have blocked bot, etc.
-      if (err?.description?.includes('chat not found')) {
+      const errObj = err as Error & { description?: string };
+      const errMsg = errObj.description || errObj.message;
+      if (errObj.description?.includes('chat not found')) {
         console.warn(`DM to user ${player.id} failed – they never started the bot`);
       } else {
-        console.error('Failed to DM user:', err?.description || err);
+        console.error('Failed to DM user:', errMsg);
       }
     }
   }
@@ -139,7 +145,8 @@ export function initWS(server: import('http').Server) {
     }
     
     // Store color assignment on the WebSocket
-    (ws as any).playerColor = color;
+    const socket = ws as PlayerSocket;
+    socket.playerColor = color;
     
     sessionClients.clients.add(ws);
     
@@ -210,7 +217,7 @@ export function initWS(server: import('http').Server) {
       
       // Validate it's the correct player's turn
       const currentTurn = game.turn();
-      const playerColor = (ws as any).playerColor;
+      const playerColor = (ws as PlayerSocket).playerColor;
       if (currentTurn !== playerColor) {
         console.log(`Invalid move attempt: ${playerColor} tried to move on ${currentTurn}'s turn`);
         ws.send(JSON.stringify({ 
@@ -237,7 +244,7 @@ export function initWS(server: import('http').Server) {
         move = game.move({
           from: uFrom,
           to: uTo,
-          promotion: (promo as any) || 'q',
+          promotion: (promo as 'q' | 'r' | 'b' | 'n' | undefined) || 'q',
         });
         
         if (!move) throw new Error('Illegal move');
@@ -339,7 +346,7 @@ export function initWS(server: import('http').Server) {
         console.log('AI turn - calculating move...');
         setTimeout(async () => {
           try {
-            const level = (gameSession as any).aiLevel || 10;
+            const level = gameSession.aiLevel || 10;
             const depth = Math.max(2, Math.floor(level / 3));
             const aiMove = await bestMove(game.fen(), depth);
             console.log(`AI attempting move: ${aiMove}`);
@@ -354,7 +361,7 @@ export function initWS(server: import('http').Server) {
               aiMoveResult = game.move({
                 from: aiFrom,
                 to: aiTo,
-                promotion: (aiPromo as any) || 'q'
+                promotion: (aiPromo as 'q' | 'r' | 'b' | 'n' | undefined) || 'q'
               });
             } else {
               // Fallback: try as algebraic notation

@@ -5,8 +5,8 @@ import http from 'http';
 import path from 'node:path';
 import { initWS, setBotInstance } from './wsHub';
 import { registerUser } from './store/db';
-import { games, loadGames } from './store/games';
-import { loadStats, saveStatsPeriodically, saveStats, getAllStats } from './store/stats';
+import { games, loadGames, purgeFinished } from './store/games';
+import { loadStats, saveStatsPeriodically, saveStats } from './store/stats';
 import { log } from './log';
 import { Counter, register } from 'prom-client';
 import { t } from './i18n';
@@ -33,7 +33,6 @@ loadStats();
 loadGames();
 saveStatsPeriodically();
 cron.schedule('0 3 * * *', () => {
-  const { purgeFinished } = require('./store/games');
   purgeFinished(30);
 });
 
@@ -129,17 +128,21 @@ app.get('/health', (req, res) => {
 });
 
 // Import command handlers
-import { handleNewGame, handleSoloGame, handleMove, handleResign, handleCallbackQuery, handleStats, handleLeaderboard } from './telechess/commands';
+import { handleNewGame, handleSoloGame, handleMove, handleResign, handleCallbackQuery, handleStats, handleLeaderboard, registerSpectateHandler } from './telechess/commands';
 
 // Set up bot commands
 if (bot) {
-  bot.use(rateLimit({ window: 10000, limit: 5 }));
+  bot.use(rateLimit({
+    window: 10000,
+    limit: 5,
+    keyGenerator: ctx => String(ctx.from?.id)
+  }));
   bot.start((ctx) => {
     // Register user for DM capability
     if (ctx.from && ctx.chat) {
       registerUser(ctx.from.id, ctx.chat.id, ctx.from.username);
       logger.info(`User ${ctx.from.id} (${ctx.from.username || 'unnamed'}) registered for DMs`);
-      userPrefs[ctx.from.id] = { lang: ctx.from.language_code || 'en' };
+      userPrefs[ctx.from.id] = { lang: ctx.from.language_code?.slice(0, 2) ?? 'en' };
     }
     ctx.reply('Welcome to SPRESS Chess! ♟️\nSend /new @opponent to start a game or /solo to play against AI.');
   });
@@ -154,7 +157,8 @@ if (bot) {
 bot.command('solo', handleSoloGame);
 bot.command('resign', handleResign);
 bot.command('stats', handleStats);
-bot.command('leaderboard', handleLeaderboard);
+  bot.command('leaderboard', handleLeaderboard);
+  registerSpectateHandler(bot);
 
 // Reset command for testing (admin only)
 bot.command('reset', (ctx) => {
@@ -180,6 +184,9 @@ bot.command('reset', (ctx) => {
     const t = Date.now();
     if (ctx.from && ctx.chat) {
       registerUser(ctx.from.id, ctx.chat.id, ctx.from.username);
+      if (!userPrefs[ctx.from.id]) {
+        userPrefs[ctx.from.id] = { lang: ctx.from.language_code?.slice(0, 2) ?? 'en' };
+      }
     }
     await next();
     cmds.inc();

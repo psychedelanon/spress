@@ -137,6 +137,15 @@ The chess board opens as a Telegram Web App with:
 - Telegram theme integration
 - Haptic feedback support
 
+### Troubleshooting Telegram Mini Apps
+
+- **Blank screen on Android** – ensure your server provides the **full SSL
+  certificate chain**. Serving only the leaf certificate can cause Telegram’s
+  Android webview to block the request entirely.
+- **Stuck loading** – some Telegram versions (for example v10.2.2 on Android)
+  had bugs preventing mini apps from launching. Updating the Telegram client
+  typically resolves this.
+
 ## 🎯 Future Enhancements
 
 - [ ] Custom piece graphics

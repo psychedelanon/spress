@@ -382,6 +382,11 @@ export async function handleCallbackQuery(ctx: Context) {
       ctx.answerCbQuery('This challenge is not for you');
       return;
     }
+    // Additional check for username if ID not set
+    if (!challenge.opponent.id && challenge.opponent.username && challenge.opponent.username !== ctx.from.username) {
+      ctx.answerCbQuery('This challenge is not for you');
+      return;
+    }
 
     challenge.opponent.id = ctx.from.id;
     challenge.opponent.username = ctx.from.username || challenge.opponent.username;

@@ -1,0 +1,24 @@
+{
+  "accountAssociation": {
+    "header": "INSERT_HEADER",
+    "payload": "INSERT_PAYLOAD",
+    "signature": "INSERT_SIGNATURE"
+  },
+  "frame": {
+    "version": "1",
+    "name": "Spress",
+    "subtitle": "Social strategy game",
+    "description": "Play strategy games, connect with friends, and earn rewards.",
+    "iconUrl": "https://your-app.up.railway.app/icon.png",
+    "homeUrl": "https://your-app.up.railway.app",
+    "splashImageUrl": "https://your-app.up.railway.app/splash.png",
+    "splashBackgroundColor": "#000000",
+    "heroImageUrl": "https://your-app.up.railway.app/hero.png",
+    "tagline": "Play. Connect. Compete.",
+    "screenshotUrls": [
+      "https://your-app.up.railway.app/screenshot1.png"
+    ],
+    "primaryCategory": "games",
+    "tags": ["multiplayer", "strategy", "social", "onchain"]
+  }
+}

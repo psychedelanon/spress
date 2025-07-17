@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@coinbase/onchainkit": "^0.38.17",
     "@twa-dev/sdk": "^7.1.1",
     "chess.js": "^1.4.0",
     "react": "^18.3.1",

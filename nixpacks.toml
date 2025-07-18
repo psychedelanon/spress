@@ -4,11 +4,22 @@ NIXPACKS_NODE_VERSION = "20"
 # PUBLIC_URL will be set by Railway environment variable
 
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = [
+  "nodejs_20",
+  "python3",
+  "gcc",
+  "gnumake",
+  "pkg-config",
+  "cairo",
+  "pango",
+  "libpng",
+  "libjpeg",
+  "giflib"
+]
 
 [phases.install]
 cmds = [
-  "npm ci --no-audit --no-fund", 
+  "npm ci --no-audit --no-fund",
   "cd webapp && npm ci --no-audit --no-fund"
 ]
 

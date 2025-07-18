@@ -474,9 +474,8 @@ export async function handleCallbackQuery(ctx: Context) {
 
   } else if (data === 'solo_easy' || data === 'solo_med' || data === 'solo_hard') {
     const level = data === 'solo_easy' ? 2 : data === 'solo_med' ? 10 : 15;
-    // Fix: create a shallow clone of ctx and set message property on the clone
-    const ctxForSolo = Object.create(ctx);
-    ctxForSolo.message = { text: `/solo ${level}` };
+    // Use a plain object spread to override message
+    const ctxForSolo = { ...ctx, message: { text: `/solo ${level}` } };
     await handleSoloGame(ctxForSolo as any);
     ctx.answerCbQuery();
   } else if (data.startsWith('help_')) {

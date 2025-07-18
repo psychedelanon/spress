@@ -474,8 +474,10 @@ export async function handleCallbackQuery(ctx: Context) {
 
   } else if (data === 'solo_easy' || data === 'solo_med' || data === 'solo_hard') {
     const level = data === 'solo_easy' ? 2 : data === 'solo_med' ? 10 : 15;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await handleSoloGame(Object.assign(ctx, { message: { text: `/solo ${level}` } }) as any);
+    // Fix: create a shallow clone of ctx and set message property on the clone
+    const ctxForSolo = Object.create(ctx);
+    ctxForSolo.message = { text: `/solo ${level}` };
+    await handleSoloGame(ctxForSolo as any);
     ctx.answerCbQuery();
   } else if (data.startsWith('help_')) {
     ctx.answerCbQuery();

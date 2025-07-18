@@ -116,6 +116,11 @@ To expose the Prometheus metrics endpoint on Fly, add to `fly.toml`:
     handlers = ["http"]
 ```
 
+### Optional: Board Image Support
+Install the [`chess-image-generator`](https://www.npmjs.com/package/chess-image-generator) package if
+you want inline "Show Board" buttons to reply with PNG chessboards. Without it the bot falls back to
+an ASCII board.
+
 ### Bot Setup
 1. Create a bot with @BotFather on Telegram
 2. Set bot commands via BotFather:

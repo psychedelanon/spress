@@ -53,7 +53,7 @@ npm test
 # Build both backend and webapp
 npm run build
 
-# Start production server
+# Start production server (auto-builds webapp if missing)
 npm start
 ```
 

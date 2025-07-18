@@ -21,4 +21,4 @@ COPY . .
 RUN npm run build
 
 EXPOSE 9000
-CMD ["node", "dist/server.js"]
+CMD ["node", "start.js"]

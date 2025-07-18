@@ -18,4 +18,4 @@ cmds = [
 ]
 
 [start]
-cmd = "node dist/server.js" 
+cmd = "node start.js"

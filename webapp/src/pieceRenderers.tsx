@@ -7,7 +7,7 @@ const PIECE_NAMES = ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP', 'bK', 'bQ', 'bR', 'bB',
 const preloadImages = () => {
   PIECE_NAMES.forEach(pieceName => {
     const img = new Image();
-    img.src = `/pieces/${pieceName}.svg`;
+    img.src = `/webapp/pieces/${pieceName}.svg`;
   });
 };
 
@@ -20,7 +20,7 @@ if (typeof window !== 'undefined') {
 const createPieceRenderer = (pieceName: string) => {
   return React.memo(({ squareWidth }: { squareWidth: number }) => {
     // Memoized image source
-    const imageUrl = useMemo(() => `/pieces/${pieceName}.svg`, []);
+    const imageUrl = useMemo(() => `/webapp/pieces/${pieceName}.svg`, []);
     
     // Memoized styles
     const imageStyles = useMemo(() => ({

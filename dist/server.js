@@ -42,6 +42,7 @@ const telegraf_1 = require("telegraf");
 const dotenv_1 = __importDefault(require("dotenv"));
 const http_1 = __importDefault(require("http"));
 const node_path_1 = __importDefault(require("node:path"));
+const node_fs_1 = __importDefault(require("node:fs"));
 const wsHub_1 = require("./wsHub");
 const db_1 = require("./store/db");
 const games_1 = require("./store/games");
@@ -90,50 +91,39 @@ if (bot) {
 // Middleware
 app.use(express_1.default.json());
 app.use(express_1.default.static('public'));
-// Serve webapp static files in production or fallback
-if (process.env.NODE_ENV === 'production') {
+// Serve webapp static files if built, otherwise show development hint
+{
     const webappDistPath = node_path_1.default.join(__dirname, '../webapp/dist');
     const webappIndexPath = node_path_1.default.join(webappDistPath, 'index.html');
-    logger.info('🌐 Setting up webapp static files...');
-    logger.info({ webappDistPath, webappIndexPath }, 'paths');
-    // Serve static files
-    app.use('/webapp', express_1.default.static(webappDistPath, { maxAge: '1h' }));
-    // Explicit route for pieces (fallback safety - ensures PNGs are accessible)
-    app.use('/webapp/pieces', express_1.default.static(node_path_1.default.join(webappDistPath, 'pieces'), { maxAge: '1h' }));
-    // Serve index.html for all webapp routes
-    app.get('/webapp/*', (_req, res) => {
-        res.sendFile(webappIndexPath, (err) => {
-            if (err) {
-                logger.error({ err }, 'Failed to serve webapp index.html');
-                res.status(500).send(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>SPRESS Chess</title></head>
-          <body style="background:#00102E;color:#FFD700;font-family:system-ui;text-align:center;padding:50px;">
-            <h1>🏗️ SPRESS Chess</h1>
-            <p>Mini App is being built...</p>
-            <p>Use bot commands for now: /new @username</p>
-            <p>Check back soon for the interactive board!</p>
+    const hasWebappBuild = node_fs_1.default.existsSync(webappIndexPath);
+    logger.info('🌐 Webapp build ' + (hasWebappBuild ? 'found' : 'not found'));
+    if (hasWebappBuild) {
+        app.use('/webapp', express_1.default.static(webappDistPath, { maxAge: '1h' }));
+        app.use('/webapp/pieces', express_1.default.static(node_path_1.default.join(webappDistPath, 'pieces'), { maxAge: '1h' }));
+        const serveIndex = (_req, res) => {
+            res.sendFile(webappIndexPath, err => {
+                if (err) {
+                    logger.error({ err }, 'Failed to serve webapp index.html');
+                    res.status(500).send('Error loading app interface.');
+                }
+            });
+        };
+        app.get('/webapp/*', serveIndex);
+        app.get('/bot', serveIndex);
+    }
+    else {
+        app.get('/webapp/*', (_req, res) => {
+            res.send(`
+        <html>
+          <body>
+            <h1>Development Mode</h1>
+            <p>Start the webapp dev server: <code>cd webapp && npm run dev</code></p>
+            <p>Then visit: <a href="http://localhost:5173">http://localhost:5173</a></p>
           </body>
-          </html>
-        `);
-            }
+        </html>
+      `);
         });
-    });
-}
-else {
-    // In development, just serve a simple message
-    app.get('/webapp/*', (_req, res) => {
-        res.send(`
-      <html>
-        <body>
-          <h1>Development Mode</h1>
-          <p>Start the webapp dev server: <code>cd webapp && npm run dev</code></p>
-          <p>Then visit: <a href="http://localhost:5173">http://localhost:5173</a></p>
-        </body>
-      </html>
-    `);
-    });
+    }
 }
 // WebSocket handling is now done in wsHub.ts
 // Telegram webhook endpoint

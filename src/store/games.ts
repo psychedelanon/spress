@@ -22,8 +22,8 @@ db.exec(`
 
 // In insertGame, updateGame, etc., use the prepared statements
 const insertStmt = db.prepare(`
-  INSERT INTO games (id, fen, pgn, turn, lastMoveAt, updatedAt)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT INTO games (id, fen, pgn, turn, lastMoveAt, createdAt, updatedAt)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
 
 const updateStmt = db.prepare(`
@@ -48,7 +48,7 @@ export const games = new Map<string, GameSession>();
 export function insertGame(game: GameSession) {
   const turn = game.fen.split(' ')[1];
   const now = Date.now();
-  insertStmt.run(game.id, game.fen, game.pgn, turn, game.lastMoveAt, now);
+  insertStmt.run(game.id, game.fen, game.pgn, turn, game.lastMoveAt, now, now);
   games.set(game.id, game);
 }
 

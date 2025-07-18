@@ -69,19 +69,24 @@ async function handleSoloGame(ctx) {
     if (Array.from(games_1.games.values()).some(g => !g.winner && g.chatId === chatId && (g.players.w.id === userId || g.players.b.id === userId))) {
         return ctx.reply('Finish or /resign your current game first.');
     }
-    const parts = ('text' in ctx.message ? ctx.message.text.split(' ') : []);
-    const arg = parts[1];
     let level = null;
-    if (arg) {
-        const a = arg.toLowerCase();
-        if (a === 'easy')
-            level = 2;
-        else if (a === 'medium' || a === 'med')
-            level = 10;
-        else if (a === 'hard')
-            level = 15;
-        else if (/^\d+$/.test(a))
-            level = Math.min(20, Math.max(0, parseInt(a, 10)));
+    const override = ctx.state?.soloLevel;
+    if (typeof override === 'number') {
+        level = override;
+    } else {
+        const parts = ('text' in ctx.message ? ctx.message.text.split(' ') : []);
+        const arg = parts[1];
+        if (arg) {
+            const a = arg.toLowerCase();
+            if (a === 'easy')
+                level = 2;
+            else if (a === 'medium' || a === 'med')
+                level = 10;
+            else if (a === 'hard')
+                level = 15;
+            else if (/^\d+$/.test(a))
+                level = Math.min(20, Math.max(0, parseInt(a, 10)));
+        }
     }
     if (level === null) {
         return ctx.reply('Pick AI difficulty', {
@@ -401,9 +406,9 @@ async function handleCallbackQuery(ctx) {
     }
     else if (data === 'solo_easy' || data === 'solo_med' || data === 'solo_hard') {
         const level = data === 'solo_easy' ? 2 : data === 'solo_med' ? 10 : 15;
-        // Directly assign a fake message to ctx to preserve all properties and methods
-        ctx.message = { text: `/solo ${level}` };
+        ctx.state.soloLevel = level;
         await handleSoloGame(ctx);
+        delete ctx.state.soloLevel;
         ctx.answerCbQuery();
     }
     else if (data.startsWith('help_')) {

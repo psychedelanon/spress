@@ -7,13 +7,13 @@ Set these in your Railway project's environment variables:
 ```env
 NODE_ENV=production
 PUBLIC_URL=https://your-app-name.railway.app
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELE_TOKEN=your_telegram_bot_token
 ```
 
 ### Important Notes:
 
 1. **PUBLIC_URL**: Must be set to your actual Railway app URL so the Telegram bot generates correct webapp links
-2. **TELEGRAM_BOT_TOKEN**: Your bot token from @BotFather
+2. **TELE_TOKEN**: Your bot token from @BotFather
 3. **NODE_ENV**: Should be "production" (usually set automatically by Railway)
 
 ## Fixed Deployment Issues

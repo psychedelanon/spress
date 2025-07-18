@@ -442,9 +442,9 @@ function App() {
       <div className="game-board-section">
         {/* PNG overlay on top left corner */}
         <div className="board-overlay top-left">
-          <img 
-            src="/overlay.png" 
-            alt="Board Overlay" 
+          <img
+            src="/webapp/overlay.png"
+            alt="Board Overlay"
             className="board-overlay-image"
             onError={(e) => {
               console.log('Overlay image not found, hiding overlay');

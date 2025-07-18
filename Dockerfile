@@ -9,11 +9,12 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-# Copy webapp package files and install webapp dependencies
+# Copy webapp package files and the full webapp source, then install webapp dependencies
 COPY webapp/package*.json ./webapp/
+COPY webapp/ ./webapp/
 RUN cd webapp && npm ci
 
-# Copy the rest of the project
+# Copy the rest of the project (excluding webapp, already copied)
 COPY . .
 
 # Build the project

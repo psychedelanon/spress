@@ -20,6 +20,7 @@ const games_1 = require("../store/games");
 const stats_1 = require("../store/stats");
 const i18n_1 = require("../i18n");
 const server_1 = require("../server");
+const log_1 = require("../log");
 const WEBAPP_URL = process.env.WEBAPP_URL ||
     `${(0, ensureHttps_1.ensureHttps)(process.env.PUBLIC_URL || 'localhost:3000')}/webapp/`;
 const pendingChallenges = new Map();
@@ -70,10 +71,12 @@ async function handleSoloGame(ctx) {
         return ctx.reply('Finish or /resign your current game first.');
     }
     let level = null;
-    const override = ctx.state?.soloLevel;
+    const state = ctx.state;
+    const override = state.soloLevel;
     if (typeof override === 'number') {
         level = override;
-    } else {
+    }
+    else {
         const parts = ('text' in ctx.message ? ctx.message.text.split(' ') : []);
         const arg = parts[1];
         if (arg) {
@@ -142,8 +145,7 @@ async function handleSoloGame(ctx) {
     await ctx.reply('🤖 Solo Mode - You vs AI', {
         reply_markup: {
             inline_keyboard: [
-                [{ text: '🤖 Play Solo', web_app: { url } }],
-                [{ text: '👀 Watch', callback_data: `spectate_${sessionId}` }]
+                [{ text: '🤖 Play Solo', web_app: { url } }]
             ]
         }
     });
@@ -406,9 +408,19 @@ async function handleCallbackQuery(ctx) {
     }
     else if (data === 'solo_easy' || data === 'solo_med' || data === 'solo_hard') {
         const level = data === 'solo_easy' ? 2 : data === 'solo_med' ? 10 : 15;
-        ctx.state.soloLevel = level;
-        await handleSoloGame(ctx);
-        delete ctx.state.soloLevel;
+        // Pass the selected level via ctx.state
+        const state = ctx.state;
+        state.soloLevel = level;
+        try {
+            await handleSoloGame(ctx);
+        }
+        catch (err) {
+            const error = err;
+            const stack = error.stack || error.message || String(error);
+            log_1.log.error({ err: error }, 'Failed to start solo game');
+            await ctx.reply(`❌ Error starting solo game:\n${stack}`);
+        }
+        delete state.soloLevel;
         ctx.answerCbQuery();
     }
     else if (data.startsWith('help_')) {

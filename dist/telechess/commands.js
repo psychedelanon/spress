@@ -401,9 +401,9 @@ async function handleCallbackQuery(ctx) {
     }
     else if (data === 'solo_easy' || data === 'solo_med' || data === 'solo_hard') {
         const level = data === 'solo_easy' ? 2 : data === 'solo_med' ? 10 : 15;
-        // Use a plain object spread to override message
-        const ctxForSolo = { ...ctx, message: { text: `/solo ${level}` } };
-        await handleSoloGame(ctxForSolo);
+        // Directly assign a fake message to ctx to preserve all properties and methods
+        ctx.message = { text: `/solo ${level}` };
+        await handleSoloGame(ctx);
         ctx.answerCbQuery();
     }
     else if (data.startsWith('help_')) {

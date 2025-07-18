@@ -1,5 +1,5 @@
 import path from 'path';
-import { GameSession, PlayerInfo } from '../types';
+import { GameSession } from '../types';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 

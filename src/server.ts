@@ -93,6 +93,16 @@ if (process.env.NODE_ENV === 'production') {
       }
     });
   });
+
+  // Serve index.html for GET /bot to support Telegram Mini App launches
+  app.get('/bot', (_req, res) => {
+    res.sendFile(webappIndexPath, err => {
+      if (err) {
+        logger.error(err, 'Failed to serve webapp index for /bot');
+        res.status(500).send('Error loading app interface.');
+      }
+    });
+  });
 } else {
   // In development, just serve a simple message
   app.get('/webapp/*', (_req, res) => {

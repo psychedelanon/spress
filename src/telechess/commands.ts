@@ -10,6 +10,7 @@ import { GameSession as NewGameSession, PlayerInfo } from '../types';
 import { getStats, recordResult, getAllStats, seenChats } from '../store/stats';
 import { t } from '../i18n';
 import { userPrefs } from '../server';
+import { log as logger } from '../log';
 
 const WEBAPP_URL = process.env.WEBAPP_URL ||
   `${ensureHttps(process.env.PUBLIC_URL || 'localhost:3000')}/webapp/`;
@@ -475,8 +476,16 @@ export async function handleCallbackQuery(ctx: Context) {
   } else if (data === 'solo_easy' || data === 'solo_med' || data === 'solo_hard') {
     const level = data === 'solo_easy' ? 2 : data === 'solo_med' ? 10 : 15;
     // Directly assign a fake message to ctx to preserve all properties and methods
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (ctx as any).message = { text: `/solo ${level}` };
-    await handleSoloGame(ctx);
+    try {
+      await handleSoloGame(ctx);
+    } catch (err: unknown) {
+      const error = err as Error;
+      const stack = error.stack || error.message || String(error);
+      logger.error({ err: error }, 'Failed to start solo game');
+      await ctx.reply(`❌ Error starting solo game:\n${stack}`);
+    }
     ctx.answerCbQuery();
   } else if (data.startsWith('help_')) {
     ctx.answerCbQuery();

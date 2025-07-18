@@ -14,7 +14,7 @@
     "build:bot": "echo 'Using pre-compiled dist files'",
     "build:webapp": "cd webapp && npm run build",
     "build": "npm run build:bot && npm run build:webapp",
-    "start": "node dist/server.js",
+    "start": "node start.js",
     "test": "jest",
     "lint": "eslint --ext .ts src"
   },

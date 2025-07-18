@@ -167,8 +167,7 @@ export async function handleSoloGame(ctx: Context) {
   await ctx.reply('🤖 Solo Mode - You vs AI', {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🤖 Play Solo', web_app: { url } }],
-        [{ text: '👀 Watch', callback_data: `spectate_${sessionId}` }]
+        [{ text: '🤖 Play Solo', web_app: { url } }]
       ]
     }
   });

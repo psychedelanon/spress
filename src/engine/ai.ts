@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { log } from '../log';
 
 // Placeholder for future AI engine
 
@@ -104,7 +105,7 @@ function minimax(chess: Chess, depth: number, maximizingPlayer: boolean, alpha: 
 
 // Initialize AI engine
 export async function initAI() {
-  console.log('🤖 AI engine initialized with basic evaluation');
+  log.debug('AI engine initialized with basic evaluation');
   return Promise.resolve(true);
 }
 
@@ -134,7 +135,7 @@ export async function bestMove(fen: string, depth: number = 3): Promise<string> 
     });
     
     if (availableOpening) {
-      console.log(`🎯 AI chose opening move: ${availableOpening}`);
+      log.debug(`AI chose opening move: ${availableOpening}`);
       return availableOpening;
     }
   }
@@ -142,7 +143,7 @@ export async function bestMove(fen: string, depth: number = 3): Promise<string> 
   let bestMove = moves[0];
   let bestValue = chess.turn() === 'w' ? -Infinity : Infinity;
 
-  console.log(`🤖 AI thinking... evaluating ${moves.length} moves at depth ${depth}`);
+  log.debug(`AI evaluating ${moves.length} moves at depth ${depth}`);
 
   for (const move of moves) {
     const moveObj = chess.move(move);
@@ -165,6 +166,6 @@ export async function bestMove(fen: string, depth: number = 3): Promise<string> 
     }
   }
 
-  console.log(`🎯 AI chose move: ${bestMove} (eval: ${bestValue})`);
+  log.debug(`AI chose move: ${bestMove} (eval: ${bestValue})`);
   return bestMove;
 } 

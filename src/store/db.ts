@@ -1,4 +1,5 @@
 import { GameSession, UserRegistry } from '../types';
+import { log } from '../log';
 
 // Fallback in-memory storage until better-sqlite3 is working
 const games = new Map<string, GameSession>();
@@ -6,6 +7,8 @@ const userRegistry: UserRegistry = {};
 
 // Export games and user registry for access from other modules
 export { games, userRegistry };
+
+log.info('In-memory database initialized (fallback mode)');
 
 // Mock database functions for now
 export const insertGame = {
@@ -93,7 +96,6 @@ export const getUser = (userId: number) => {
   return userRegistry[userId] || null;
 };
 
-console.log('In-memory database initialized (fallback mode)');
 
 export function getOrCreateSession(id: string, mode: 'solo' | 'pvp'): GameSession {
   let game = games.get(id);

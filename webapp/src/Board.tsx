@@ -48,14 +48,14 @@ const PIECE_NAMES: Record<string, string> = {
 };
 
 const Board = React.memo(({ fen, turn, isGameOver, isInCheck, color, onMoveAttempt, readOnly }: Props) => {
-  console.log('🎯 Board props:', { fen, turn, color });
+  console.debug('Board props:', { fen, turn, color });
   
   // SUPER SAFE FEN - always use starting position if anything looks wrong
   const safeFen = useMemo(() => {
     return (fen && fen !== 'start' && fen.length > 20) ? fen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   }, [fen]);
   
-  console.log('🎯 Using safe FEN:', safeFen);
+  console.debug('Using safe FEN:', safeFen);
 
   // Chess.js instance for move validation and highlighting
   const chessRef = useRef(new Chess());
@@ -129,16 +129,16 @@ const Board = React.memo(({ fen, turn, isGameOver, isInCheck, color, onMoveAttem
 
   const onPieceDrop = useCallback(
     (sourceSquare: string, targetSquare: string) => {
-      console.log('🎯 [MOVE ATTEMPT]', { sourceSquare, targetSquare, turn, color, isGameOver });
+      console.debug('Move attempt', { sourceSquare, targetSquare, turn, color, isGameOver });
       
       // Don't allow moves if game is over
       if (isGameOver) {
-        console.log('❌ Move blocked: game over');
+        console.debug('Move blocked: game over');
         return false;
       }
       // only allow if it's my move
       if (turn !== color) {
-        console.log('❌ Move blocked: wrong turn', { turn, color });
+        console.debug('Move blocked: wrong turn', { turn, color });
         return false;
       }
 

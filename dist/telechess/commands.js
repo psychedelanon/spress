@@ -14,7 +14,6 @@ exports.configureTelegramBot = configureTelegramBot;
 // Import GameSession types for potential future use
 const ensureHttps_1 = require("../utils/ensureHttps");
 const boardText_1 = require("../utils/boardText");
-const boardImage_1 = require("../render/boardImage");
 const db_1 = require("../store/db");
 const games_1 = require("../store/games");
 const stats_1 = require("../store/stats");
@@ -24,8 +23,6 @@ const log_1 = require("../log");
 const WEBAPP_URL = process.env.WEBAPP_URL ||
     `${(0, ensureHttps_1.ensureHttps)(process.env.PUBLIC_URL || 'localhost:3000')}/webapp/`;
 const pendingChallenges = new Map();
-let lastFen = '';
-let lastPng = Buffer.alloc(0);
 function expireChallenge(id) {
     const c = pendingChallenges.get(id);
     if (!c)
@@ -285,17 +282,8 @@ async function handleCallbackQuery(ctx) {
         }
         ctx.answerCbQuery();
         const fen = game.fen;
-        try {
-            if (lastFen !== fen) {
-                lastPng = await (0, boardImage_1.fenToPng)(fen);
-                lastFen = fen;
-            }
-            await ctx.replyWithPhoto({ source: lastPng }, { caption: `Turn: ${game.fen.split(' ')[1] === 'w' ? 'White' : 'Black'}` });
-        }
-        catch {
-            const boardText = (0, boardText_1.boardTextFromFEN)(fen);
-            await ctx.reply(`\u26a0\ufe0f Failed to render board, falling back:\n${boardText}`, { parse_mode: 'Markdown' });
-        }
+        const boardText = (0, boardText_1.boardTextFromFEN)(fen);
+        await ctx.reply(boardText, { parse_mode: 'Markdown' });
     }
     else if (data.startsWith('show_moves_')) {
         const sessionId = data.replace('show_moves_', '');

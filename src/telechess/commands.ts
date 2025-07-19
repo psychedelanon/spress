@@ -3,7 +3,6 @@ import { InlineKeyboardMarkup } from 'telegraf/types';
 // Import GameSession types for potential future use
 import { ensureHttps } from '../utils/ensureHttps';
 import { boardTextFromFEN } from '../utils/boardText';
-import { fenToPng } from '../render/boardImage';
 import { registerUser, getUser } from '../store/db';
 import { insertGame, games, deleteGame } from '../store/games';
 import { GameSession as NewGameSession, PlayerInfo } from '../types';
@@ -30,8 +29,6 @@ interface PendingChallenge {
 
 const pendingChallenges = new Map<string, PendingChallenge>();
 
-let lastFen = '';
-let lastPng: Buffer = Buffer.alloc(0);
 
 function expireChallenge(id: string) {
   const c = pendingChallenges.get(id);
@@ -339,16 +336,8 @@ export async function handleCallbackQuery(ctx: Context) {
 
     ctx.answerCbQuery();
     const fen = game.fen;
-    try {
-      if (lastFen !== fen) {
-        lastPng = await fenToPng(fen);
-        lastFen = fen;
-      }
-      await ctx.replyWithPhoto({ source: lastPng }, { caption: `Turn: ${game.fen.split(' ')[1] === 'w' ? 'White' : 'Black'}` });
-    } catch {
-      const boardText = boardTextFromFEN(fen);
-      await ctx.reply(`\u26a0\ufe0f Failed to render board, falling back:\n${boardText}`, { parse_mode: 'Markdown' });
-    }
+    const boardText = boardTextFromFEN(fen);
+    await ctx.reply(boardText, { parse_mode: 'Markdown' });
     
   } else if (data.startsWith('show_moves_')) {
     const sessionId = data.replace('show_moves_', '');

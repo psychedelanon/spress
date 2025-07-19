@@ -396,6 +396,7 @@ function App() {
 
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
+      setErrorMessage('Failed to connect to game. Please try again.');
     };
 
     ws.onclose = (event) => {
@@ -409,6 +410,9 @@ function App() {
           window.location.reload();
         }, 2000);
       }
+      if (!gameState) {
+        setErrorMessage('Connection lost. Please restart the game from Telegram.');
+      }
     };
 
     return () => {
@@ -416,6 +420,17 @@ function App() {
       ws.close();
     };
   }, [replayParam, urlParams.session, urlParams.color, wsUrl, handleMessage]);
+
+  // Timeout to surface connection issues instead of showing a blank screen
+  useEffect(() => {
+    if (gameState) return;
+    const timer = setTimeout(() => {
+      if (!gameState) {
+        setErrorMessage('Unable to connect. Please start a new game from Telegram.');
+      }
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [gameState]);
 
   // Memoized game outcome message
   const gameOutcomeMessage = useMemo(() => getGameOutcomeMessage(), [getGameOutcomeMessage]);

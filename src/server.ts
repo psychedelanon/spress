@@ -25,6 +25,8 @@ const app = express();
 const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 export const userPrefs: Record<number, { lang: string }> = {};
+// Map of telegramId -> sessionId for quick lookup of active games
+export const activeSessions = new Map<number, string>();
 
 const cmds = new Counter({ name: 'commands_total', help: 'total cmds' });
 
@@ -115,6 +117,19 @@ if (process.env.NODE_ENV === 'production') {
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Lookup current session for a telegram user
+app.get('/api/session', (req, res) => {
+  const telegramId = Number(req.query.telegramId);
+  if (!telegramId) {
+    return res.status(400).json({ error: 'telegramId required' });
+  }
+  const sessionId = activeSessions.get(telegramId);
+  if (!sessionId) {
+    return res.sendStatus(404);
+  }
+  res.json({ sessionId });
 });
 
 // Import command handlers

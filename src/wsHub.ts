@@ -5,6 +5,7 @@ import bestMove from './engine/stockfish';
 import { updateGame, deleteGame, games } from './store/games';
 import { ensureHttps } from './utils/ensureHttps';
 import { boardTextFromFEN } from './utils/boardText';
+import { activeSessions } from './server';
 import { GameSession } from './types';
 import { recordResult } from './store/stats';
 
@@ -331,6 +332,8 @@ export function initWS(server: import('http').Server) {
         }
         
         deleteGame(id);
+        activeSessions.delete(gameSession.players.w.id);
+        activeSessions.delete(gameSession.players.b.id);
         setTimeout(() => {
           sessions.delete(id);
           games.delete(id);
@@ -413,6 +416,8 @@ export function initWS(server: import('http').Server) {
                 }
                 
                 deleteGame(id);
+                activeSessions.delete(gameSession.players.w.id);
+                activeSessions.delete(gameSession.players.b.id);
                 setTimeout(() => {
                   sessions.delete(id);
                   games.delete(id);

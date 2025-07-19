@@ -9,7 +9,7 @@ import { insertGame, games, deleteGame } from '../store/games';
 import { GameSession as NewGameSession, PlayerInfo } from '../types';
 import { getStats, recordResult, getAllStats, seenChats } from '../store/stats';
 import { t } from '../i18n';
-import { userPrefs } from '../server';
+import { userPrefs, activeSessions } from '../server';
 import { log as logger } from '../log';
 
 const WEBAPP_URL = process.env.WEBAPP_URL ||
@@ -157,6 +157,8 @@ export async function handleSoloGame(ctx: Context) {
   gameSession.aiLevel = level;
   
   games.set(sessionId, gameSession);
+  // Map user to active session
+  activeSessions.set(userId, sessionId);
 
   // Persist to database
   insertGame(gameSession);
@@ -281,6 +283,8 @@ export function handleResign(ctx: Context) {
   // Remove from active games
   games.delete(userGame.id);
   deleteGame(userGame.id);
+  activeSessions.delete(userGame.players.w.id);
+  activeSessions.delete(userGame.players.b.id);
 
   ctx.reply(`🏳️ You resigned as ${playerColor}. ${winner} wins!`);
 }
@@ -422,6 +426,8 @@ export async function handleCallbackQuery(ctx: Context) {
     };
 
     games.set(sessionId, gameSession);
+    activeSessions.set(challenge.challenger.id, sessionId);
+    activeSessions.set(challenge.opponent.id!, sessionId);
     insertGame(gameSession);
 
     pendingChallenges.delete(sessionId);

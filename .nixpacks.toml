@@ -1,11 +1,31 @@
 [variables]
+NODE_ENV = "production"
 NIXPACKS_NODE_VERSION = "20"
 
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = [
+  "nodejs_20",
+  "python3",
+  "gcc",
+  "gnumake",
+  "pkg-config",
+  "cairo",
+  "pango",
+  "libpng",
+  "libjpeg",
+  "giflib"
+]
+
+[phases.install]
+cmds = [
+  "npm ci --no-audit --no-fund",
+  "cd webapp && npm ci --no-audit --no-fund"
+]
 
 [phases.build]
-cmds = ["npm install --legacy-peer-deps", "npm run build"]
+cmds = [
+  "npm run build"
+]
 
 [start]
-cmd = "node dist/server.js" 
+cmd = "node start.js"

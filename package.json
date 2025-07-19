@@ -37,8 +37,7 @@
     "stockfish": "^16.0.0",
     "telegraf": "^4.16.3",
     "telegraf-ratelimit": "^2.0.0",
-    "ws": "^8.18.2",
-    "chess-image-generator": "^1.0.9"
+    "ws": "^8.18.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

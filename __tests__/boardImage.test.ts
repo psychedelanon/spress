@@ -1,18 +1,21 @@
 import ChessImageGenerator from 'chess-image-generator';
 import { fenToPng } from '../src/render/boardImage';
 
-jest.mock('chess-image-generator');
+const mockInstance = {
+  loadFEN: jest.fn(),
+  generatePNGBuffer: jest.fn().mockResolvedValue(Buffer.from('img'))
+};
+
+jest.mock('chess-image-generator', () => {
+  return jest.fn(() => mockInstance);
+}, { virtual: true });
 
 test('caches board images', async () => {
-  const mock = {
-    loadFEN: jest.fn(),
-    generatePNGBuffer: jest.fn().mockResolvedValue(Buffer.from('img'))
-  };
-  (ChessImageGenerator as unknown as jest.Mock).mockImplementation(() => mock);
+  (ChessImageGenerator as unknown as jest.Mock).mockImplementation(() => mockInstance);
 
   await fenToPng('start');
   await fenToPng('start');
 
-  expect(mock.loadFEN).toHaveBeenCalledTimes(1);
-  expect(mock.generatePNGBuffer).toHaveBeenCalledTimes(1);
+  expect(mockInstance.loadFEN).toHaveBeenCalledTimes(1);
+  expect(mockInstance.generatePNGBuffer).toHaveBeenCalledTimes(1);
 });

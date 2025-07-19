@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { Chess } from 'chess.js';
 import ErrorBoundary from './ErrorBoundary';
+import { TelegramBridge } from './TelegramBridge';
 import './App.css';
 
 // Lazy load components
@@ -61,6 +62,7 @@ function App() {
 
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Move preview state
   const [recentMoves, setRecentMoves] = useState<MovePreview[]>([]);
@@ -348,7 +350,28 @@ function App() {
     }
     
     if (!urlParams.session) {
-      console.error('No session ID provided');
+      (async () => {
+        const tgUser = TelegramBridge.getInstance().getUser();
+        if (!tgUser) {
+          setErrorMessage('Please open the game via Telegram to start playing.');
+          return;
+        }
+        try {
+          const res = await fetch(`/api/session?telegramId=${tgUser.id}`);
+          if (!res.ok) throw new Error('no session');
+          const data = await res.json();
+          const sessionId = data.session || data.sessionId;
+          const color = data.color;
+          if (sessionId && color) {
+            window.location.href = `/webapp/?session=${sessionId}&color=${color}`;
+          } else {
+            throw new Error('no session');
+          }
+        } catch (err) {
+          console.error('No active session', err);
+          setErrorMessage('No active session found. Start a new game from Telegram.');
+        }
+      })();
       return;
     }
 
@@ -409,6 +432,15 @@ function App() {
       'Your turn - drag pieces to move!' : 
       'Waiting for opponent...';
   }, [gameState?.isGameOver, gameState?.turn, gameState?.color]);
+
+  if (errorMessage) {
+    return (
+      <div className="app-container">
+        <h1 className="title">SPRESS Chess</h1>
+        <div className="error-message">{errorMessage}</div>
+      </div>
+    );
+  }
 
   // Loading state
   if (!socket || !gameState) {

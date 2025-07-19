@@ -62,6 +62,7 @@ exports.app = app;
 const server = http_1.default.createServer(app);
 const port = process.env.PORT || 3000;
 exports.userPrefs = {};
+exports.activeSessions = new Map();
 const cmds = new prom_client_1.Counter({ name: 'commands_total', help: 'total cmds' });
 Sentry.init({ dsn: process.env.SENTRY_DSN || '' });
 (0, stats_1.loadStats)();
@@ -139,6 +140,25 @@ if (process.env.NODE_ENV === 'production') {
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+// Lookup current session for a telegram user
+app.get('/api/session', (req, res) => {
+    const telegramId = Number(req.query.telegramId);
+    if (!telegramId) {
+        return res.status(400).json({ error: 'telegramId required' });
+    }
+    const sessionId = exports.activeSessions.get(telegramId);
+    if (!sessionId) {
+        return res.sendStatus(404);
+    }
+    const game = games_1.games.get(sessionId);
+    if (!game) {
+        return res.sendStatus(404);
+    }
+    let color = 'w';
+    if (game.players.b.id === telegramId)
+        color = 'b';
+    res.json({ sessionId, color });
 });
 // Import command handlers
 const commands_1 = require("./telechess/commands");

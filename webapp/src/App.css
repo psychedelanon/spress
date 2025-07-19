@@ -69,6 +69,12 @@ body {
   margin-top: 50px;
 }
 
+.error-message {
+  color: #E01313;
+  margin-top: 20px;
+  text-align: center;
+}
+
 .game-info {
   display: flex;
   flex-direction: column;

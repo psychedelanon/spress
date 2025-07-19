@@ -222,12 +222,7 @@ function App() {
 
   // Memoized WebSocket message handler
   const handleMessage = useCallback((event: MessageEvent) => {
-    console.log('🐛 Raw WebSocket data:', event.data);
     const msg = JSON.parse(event.data);
-    console.log('🐛 Parsed WebSocket message:', msg);
-    console.log('🐛 Message FEN field:', msg.fen);
-    console.log('🐛 FEN type:', typeof msg.fen);
-    console.log('🐛 FEN length:', msg.fen ? msg.fen.length : 'undefined');
     
     // 1️⃣ Any message that carries a fresh position should update state
     const carriesFen = 
@@ -273,26 +268,12 @@ function App() {
       }
 
       const finalFen = msg.fen || 'start';
-      console.log('🐛 Processing FEN:', msg.fen);
-      console.log('🐛 FEN split test:', msg.fen ? msg.fen.split(' ') : 'no fen');
+      // Debug FEN parsing
       const finalTurn = msg.turn || (msg.fen ? msg.fen.split(' ')[1] : 'w');
-      console.log('🐛 Final FEN:', finalFen);
-      console.log('🐛 Final turn:', finalTurn);
-      
-      console.log('🐛 Setting game state:', {
-        fen: finalFen,
-        turn: finalTurn,
-        color: urlParams.color,
-        session: urlParams.session,
-        isGameOver,
-        isInCheck,
-        msgType: msg.type,
-        rawMsg: msg
-      });
+      // console.debug('Setting game state', { finalFen, finalTurn, msg });
 
       // TEMPORARY FIX: Force correct starting FEN for testing
       const correctedFen = finalFen === 'start' ? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' : finalFen;
-      console.log('🐛 Using corrected FEN:', correctedFen);
 
       setGameState({
         fen: correctedFen,
@@ -312,7 +293,7 @@ function App() {
     // 2️⃣ Messages that don't carry a position
     if (msg.type === 'invalid' || msg.type === 'error') {
       moveInFlight.current = false;
-      console.log('Invalid move or error:', msg);
+      console.warn('Invalid move or error:', msg);
     }
     
     // 3️⃣ Session expired/corrupted - show user-friendly message
@@ -379,7 +360,7 @@ function App() {
     const ws = new WebSocket(`${wsUrl}?session=${urlParams.session}&color=${urlParams.color}`);
     
     ws.onopen = () => {
-      console.log('🔌 WebSocket connected');
+      console.debug('WebSocket connected');
       setSocket(ws);
       
       // Send keepalive pings every 30 seconds
@@ -400,12 +381,12 @@ function App() {
     };
 
     ws.onclose = (event) => {
-      console.log('WebSocket disconnected:', event.code, event.reason);
+      console.debug('WebSocket disconnected:', event.code, event.reason);
       setSocket(null);
       
       // Try to reconnect if connection was lost unexpectedly
       if (event.code !== 1000 && event.code !== 1001) {
-        console.log('Attempting to reconnect...');
+        console.debug('Attempting to reconnect...');
         setTimeout(() => {
           window.location.reload();
         }, 2000);
@@ -470,7 +451,7 @@ function App() {
   return (
     <div className="app-container">
       <div className="header-section">
-        <h1 className="main-title">SPROTO CHESS</h1>
+        <h1 className="main-title">SPRESS Chess</h1>
         <div className="subtitle-effect">spress</div>
       </div>
       
@@ -494,7 +475,6 @@ function App() {
             alt="Board Overlay"
             className="board-overlay-image"
             onError={(e) => {
-              console.log('Overlay image not found, hiding overlay');
               (e.target as HTMLImageElement).style.display = 'none';
             }}
           />

@@ -129,7 +129,14 @@ app.get('/api/session', (req, res) => {
   if (!sessionId) {
     return res.sendStatus(404);
   }
-  res.json({ sessionId });
+  const game = games.get(sessionId);
+  if (!game) {
+    return res.sendStatus(404);
+  }
+  // Determine color for this user
+  let color = 'w';
+  if (game.players.b.id === telegramId) color = 'b';
+  res.json({ sessionId, color });
 });
 
 // Import command handlers

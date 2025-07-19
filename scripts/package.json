@@ -1,0 +1,23 @@
+{
+  "name": "chess-mcp-server",
+  "version": "1.0.0",
+  "description": "Custom MCP server for chess operations in Spress Chess",
+  "main": "chess-mcp-server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node chess-mcp-server.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "dependencies": {
+    "chess.js": "^1.4.0"
+  },
+  "keywords": [
+    "mcp",
+    "chess",
+    "model-context-protocol",
+    "cursor",
+    "ai"
+  ],
+  "author": "Spress Chess Team",
+  "license": "ISC"
+} 

@@ -1,0 +1,47 @@
+{
+  "mcpServers": {
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "env": {}
+    },
+    "git": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git"],
+      "env": {}
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+      "env": {
+        "MCP_SERVER_FILESYSTEM_ROOT": "."
+      }
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {
+        "MCP_SERVER_MEMORY_PATH": "./.cursor/memory"
+      }
+    },
+    "docs": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-docs"],
+      "env": {
+        "MCP_SERVER_DOCS_SOURCES": "https://react.dev/reference,https://www.typescriptlang.org/docs,https://github.com/jhlywa/chess.js,https://socket.io/docs/v4,https://telegraf.js.org"
+      }
+    },
+    "database": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite"],
+      "env": {
+        "MCP_SERVER_SQLITE_PATH": "./data/chess.db"
+      }
+    },
+    "chess": {
+      "command": "node",
+      "args": ["./scripts/chess-mcp-server.js"],
+      "env": {}
+    }
+  }
+} 

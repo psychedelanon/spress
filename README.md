@@ -142,6 +142,11 @@ The chess board opens as a Telegram Web App with:
 - Telegram theme integration
 - Haptic feedback support
 
+When opened without a `session` parameter, the webapp now automatically
+retrieves the user's active game. It calls the `/api/session` endpoint,
+which returns the last active session ID stored for that Telegram user.
+The bot records this mapping whenever a new game is created.
+
 ### Troubleshooting Telegram Mini Apps
 
 - **Blank screen on Android** – ensure your server provides the **full SSL

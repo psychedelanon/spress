@@ -106,8 +106,23 @@ WEBAPP_URL=https://yourapp.com/webapp
 METRICS_PORT=9000
 ENABLE_SHARE_HOOK=0
 ```
-To expose the Prometheus metrics endpoint on Fly, add to `fly.toml`:
+
+`PUBLIC_URL` **must** match the public domain of your deployment (for example
+`https://mychess.fly.dev`). The server listens on `PORT` (3000 by default), so
+your hosting provider needs to route traffic to this port.
+
+On Fly.io, add the following services to `fly.toml`:
 ```toml
+[[services]]
+  internal_port = 3000
+  protocol = "tcp"
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
 [[services]]
   internal_port = 9000
   protocol = "tcp"
@@ -115,6 +130,24 @@ To expose the Prometheus metrics endpoint on Fly, add to `fly.toml`:
     port = 9000
     handlers = ["http"]
 ```
+
+
+### Persistent Storage
+When `/data` exists, the server stores games in a SQLite database at
+`/data/games.db`. Mount this path as a volume so games persist after container
+restarts. Example `docker-compose.yml`:
+
+```yaml
+services:
+  spress:
+    volumes:
+      - spress_data:/data
+
+volumes:
+  spress_data:
+```
+
+For `docker run`, append `-v spress_data:/data`.
 
 ### Optional: Board Image Support
 Install the [`chess-image-generator`](https://www.npmjs.com/package/chess-image-generator) package if

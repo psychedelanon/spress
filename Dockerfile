@@ -7,6 +7,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Directory for persistent SQLite database
+RUN mkdir -p /data
+VOLUME ["/data"]
+
 # Copy root package files and install dependencies
 COPY package*.json ./
 RUN npm ci
@@ -22,5 +26,6 @@ COPY . .
 # Build the project
 RUN npm run build
 
+EXPOSE 3000
 EXPOSE 9000
 CMD ["node", "start.js"]

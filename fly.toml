@@ -5,3 +5,20 @@ DATABASE_URL = "/data/chess.sqlite"
 [[mounts]]
 source="db"
 destination="/data"
+
+[[services]]
+  internal_port = 3000
+  protocol = "tcp"
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+[[services]]
+  internal_port = 9000
+  protocol = "tcp"
+  [[services.ports]]
+    port = 9000
+    handlers = ["http"]

@@ -22,5 +22,6 @@ COPY . .
 # Build the project
 RUN npm run build
 
+EXPOSE 3000
 EXPOSE 9000
 CMD ["node", "start.js"]

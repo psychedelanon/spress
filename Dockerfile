@@ -7,6 +7,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Directory for persistent SQLite database
+RUN mkdir -p /data
+VOLUME ["/data"]
+
 # Copy root package files and install dependencies
 COPY package*.json ./
 RUN npm ci

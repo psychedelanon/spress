@@ -131,6 +131,24 @@ On Fly.io, add the following services to `fly.toml`:
     handlers = ["http"]
 ```
 
+
+### Persistent Storage
+When `/data` exists, the server stores games in a SQLite database at
+`/data/games.db`. Mount this path as a volume so games persist after container
+restarts. Example `docker-compose.yml`:
+
+```yaml
+services:
+  spress:
+    volumes:
+      - spress_data:/data
+
+volumes:
+  spress_data:
+```
+
+For `docker run`, append `-v spress_data:/data`.
+
 ### Optional: Board Image Support
 Install the [`chess-image-generator`](https://www.npmjs.com/package/chess-image-generator) package if
 you want inline "Show Board" buttons to reply with PNG chessboards. Without it the bot falls back to

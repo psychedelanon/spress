@@ -1,0 +1,14 @@
+version: '3'
+services:
+  spress:
+    build: .
+    ports:
+      - "3000:3000"
+      - "9000:9000"
+    volumes:
+      - spress_data:/data
+    environment:
+      TELE_TOKEN: "your_telegram_bot_token"
+      PUBLIC_URL: "https://your-app.example.com"
+volumes:
+  spress_data:

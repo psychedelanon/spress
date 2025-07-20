@@ -76,10 +76,21 @@ In production, Express serves:
 - Pieces: `https://your-app.railway.app/webapp/pieces/*.svg`
 - WebSocket: `wss://your-app.railway.app/ws`
 
-The Telegram bot generates links like:`https://your-app.railway.app/webapp/?session=123&color=w` 
-### Prometheus on Fly
+The Telegram bot generates links like:`https://your-app.railway.app/webapp/?session=123&color=w`
+
+### Fly.io Services
 Add to `fly.toml`:
 ```toml
+[[services]]
+  internal_port = 3000
+  protocol = "tcp"
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
 [[services]]
   internal_port = 9000
   protocol = "tcp"

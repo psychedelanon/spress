@@ -5,6 +5,6 @@ node_modules/
 .vscode/settings.json
 *.tsbuildinfo
 /dist/
-src/store/stats.json
+src/store/stats.store.json
 src/store/*.db
 

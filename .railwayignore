@@ -24,4 +24,4 @@ webapp/eslint.config.js
 # Temporary files
 *.log
 *.tmp
-.DS_Store 
+.DS_Store

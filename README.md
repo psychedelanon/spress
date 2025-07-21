@@ -57,6 +57,12 @@ npm run build
 npm start
 ```
 
+If you encounter a `createContext` error after building, clean the frontend and reinstall:
+```bash
+npm run clean:webapp
+npm run build
+```
+
 ### Deployment (Railway)
 You can deploy directly on Railway without Docker. Railway uses Nixpacks to
 install dependencies, build both the backend and React frontend, and then start
@@ -203,6 +209,15 @@ The bot records this mapping whenever a new game is created.
 - **Stuck loading** – some Telegram versions (for example v10.2.2 on Android)
   had bugs preventing mini apps from launching. Updating the Telegram client
   typically resolves this.
+- **`createContext` errors** – if the built webapp fails with
+  `Uncaught TypeError: Cannot read properties of undefined (reading 'createContext')`,
+  delete the `webapp/node_modules` and `webapp/dist` folders and reinstall
+  dependencies:
+  ```bash
+  rm -rf webapp/node_modules webapp/dist
+  npm --prefix webapp install
+  npm run build
+  ```
 
 ## 🎯 Future Enhancements
 

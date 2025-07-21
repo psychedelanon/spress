@@ -14,6 +14,7 @@
     "build:bot": "echo 'Using pre-compiled dist files'",
     "build:webapp": "cd webapp && npm run build",
     "build": "npm run build:bot && npm run build:webapp",
+    "clean:webapp": "rm -rf webapp/node_modules webapp/dist webapp/package-lock.json",
     "start": "node start.js",
     "test": "jest",
     "lint": "eslint --ext .ts src"

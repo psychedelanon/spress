@@ -16,6 +16,24 @@ TELE_TOKEN=your_telegram_bot_token
 2. **TELE_TOKEN**: Your bot token from @BotFather
 3. **NODE_ENV**: Should be "production" (usually set automatically by Railway)
 
+## Quick Node Deployment
+
+1. **Create a project** on Railway and link this repository.
+2. **Set environment variables** as shown above, particularly `TELE_TOKEN` and
+   `PUBLIC_URL` (use your Railway URL).
+3. **Build Command** (if you override the default):
+   ```bash
+   npm install && cd webapp && npm install && npm run build && cd ..
+   ```
+4. **Start Command**:
+   ```bash
+   npm start
+   ```
+5. Run `railway up` or deploy via the dashboard. Railway will install
+   dependencies, build the app, and launch `node start.js` automatically.
+
+No Docker setup is required—Railway runs the Node.js server directly.
+
 ## Fixed Deployment Issues
 
 ### ✅ 1. Backend TypeScript Compilation

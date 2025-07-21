@@ -14,7 +14,13 @@ exports.getStats = getStats;
 exports.getAllStats = getAllStats;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
-const statsPath = path_1.default.join(__dirname, 'stats.json');
+// Store stats outside the source folder if a /data volume is present to avoid
+// conflicts with the TypeScript module resolution.  When running locally
+// without the volume, keep the file next to this module but use a different
+// filename so Node does not load it instead of the .ts file.
+const statsPath = fs_1.default.existsSync('/data')
+    ? '/data/stats.json'
+    : path_1.default.join(__dirname, 'stats.store.json');
 let stats = {};
 let saveInterval = null;
 exports.seenChats = new Set();

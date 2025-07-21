@@ -57,11 +57,32 @@ npm run build
 npm start
 ```
 
+If you encounter a `createContext` error after building, clean the frontend and reinstall:
+```bash
+npm run clean:webapp
+npm run build
+```
+
 ### Deployment (Railway)
-The app is configured for Railway deployment with proper Nixpacks settings:
-- Builds both Node.js backend and React frontend
-- Serves static files from webapp/dist
-- No native dependencies (uses in-memory storage)
+You can deploy directly on Railway without Docker. Railway uses Nixpacks to
+install dependencies, build both the backend and React frontend, and then start
+`node start.js`.
+
+1. **Connect your repository** – Create a new Railway project and link this repo.
+2. **Configure environment variables** – Set at least `TELE_TOKEN` and
+   `PUBLIC_URL` (your Railway URL) in the dashboard.
+3. **Build command** – leave the default or set:
+   ```bash
+   npm install && cd webapp && npm install && npm run build && cd ..
+   ```
+4. **Start command** – use:
+   ```bash
+   npm start
+   ```
+5. Deploy with `railway up` or through the dashboard. The app will be available
+   at your Railway URL (e.g., `https://your-app.up.railway.app`).
+
+This workflow uses Node.js directly—no Docker is required.
 
 ## 🎯 Game Commands
 
@@ -188,6 +209,15 @@ The bot records this mapping whenever a new game is created.
 - **Stuck loading** – some Telegram versions (for example v10.2.2 on Android)
   had bugs preventing mini apps from launching. Updating the Telegram client
   typically resolves this.
+- **`createContext` errors** – if the built webapp fails with
+  `Uncaught TypeError: Cannot read properties of undefined (reading 'createContext')`,
+  delete the `webapp/node_modules` and `webapp/dist` folders and reinstall
+  dependencies:
+  ```bash
+  rm -rf webapp/node_modules webapp/dist
+  npm --prefix webapp install
+  npm run build
+  ```
 
 ## 🎯 Future Enhancements
 

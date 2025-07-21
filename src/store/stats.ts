@@ -44,8 +44,6 @@ export function stopStatsInterval() {
   if (saveInterval) clearInterval(saveInterval);
 }
 
-loadStats();
-
 export function initStats() {
   stats = {};
 }

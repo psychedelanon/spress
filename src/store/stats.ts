@@ -12,7 +12,13 @@ export interface UserStats {
   chats: number[];
 }
 
-const statsPath = path.join(__dirname, 'stats.json');
+// Store stats outside the source folder if a /data volume is present to avoid
+// conflicts with the TypeScript module resolution.  When running locally
+// without the volume, keep the file next to this module but use a different
+// filename so Node does not load it instead of the .ts file.
+const statsPath = fs.existsSync('/data')
+  ? '/data/stats.json'
+  : path.join(__dirname, 'stats.store.json');
 let stats: Record<string, UserStats> = {};
 let saveInterval: NodeJS.Timeout | null = null;
 export const seenChats = new Set<number>();

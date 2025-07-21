@@ -52,9 +52,9 @@ No Docker setup is required—Railway runs the Node.js server directly.
 - **Result**: Multiple components can listen without conflicts
 
 ### ✅ 4. Build Process
-- **Problem**: Inconsistent build script names
-- **Fix**: Updated `package.json` scripts (`build:bot` + `build:webapp`)
-- **Result**: Both backend and frontend build successfully
+- **Problem**: Inconsistent build script names and missing backend compilation
+- **Fix**: `build:bot` now runs `tsc` and `build:webapp` builds the React app
+- **Result**: Both backend and frontend build successfully on Railway
 
 ## Build Verification
 

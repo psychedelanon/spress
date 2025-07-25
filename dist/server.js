@@ -227,12 +227,12 @@ if (bot) {
 // Start server
 server.listen(port, () => {
     logger.info(`🚀 Server running on port ${port}`);
-    // In production (Railway), use webhooks; in development, use polling
+    // In production use webhooks; in development, use polling
     if (bot) {
         if (process.env.NODE_ENV === 'production') {
             logger.info('🔗 Production mode - bot will use webhooks');
             // Automatically set webhook URL
-            const webhookUrl = `${process.env.PUBLIC_URL || 'https://spress-production.up.railway.app'}/bot`;
+            const webhookUrl = `${process.env.PUBLIC_URL || 'https://example.fly.dev'}/bot`;
             logger.info(`🔗 Setting webhook to: ${webhookUrl}`);
             bot.telegram.setWebhook(webhookUrl)
                 .then(() => logger.info('✅ Webhook set successfully'))

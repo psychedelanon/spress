@@ -1,7 +1,7 @@
 [variables]
 NODE_ENV = "production"
 NIXPACKS_NODE_VERSION = "20"
-# PUBLIC_URL will be set by Railway environment variable
+# PUBLIC_URL should be provided by the hosting environment
 
 [phases.setup]
 nixPkgs = [

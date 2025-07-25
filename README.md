@@ -63,26 +63,24 @@ npm run clean:webapp
 npm run build
 ```
 
-### Deployment (Railway)
-You can deploy directly on Railway without Docker. Railway uses Nixpacks to
-install dependencies, build both the backend and React frontend, and then start
-`node start.js`.
+### Deployment (Fly.io)
+Deploy the bot to [Fly.io](https://fly.io/) using the included `fly.toml`.
 
-1. **Connect your repository** – Create a new Railway project and link this repo.
-2. **Configure environment variables** – Set at least `TELE_TOKEN` and
-   `PUBLIC_URL` (your Railway URL) in the dashboard.
-3. **Build command** – leave the default or set:
+1. Install the [Fly CLI](https://fly.io/docs/hands-on/install-flyctl/) and run
+   `flyctl launch` to create a new app.
+2. Set the required secrets:
    ```bash
-   npm install && cd webapp && npm install && npm run build && cd ..
+   flyctl secrets set TELE_TOKEN=your_bot_token \
+     PUBLIC_URL=https://your-app.fly.dev
    ```
-4. **Start command** – use:
+3. Deploy with:
    ```bash
-   npm start
+   flyctl deploy
    ```
-5. Deploy with `railway up` or through the dashboard. The app will be available
-   at your Railway URL (e.g., `https://your-app.up.railway.app`).
+4. The bot will be available at your Fly domain
+   (e.g., `https://your-app.fly.dev`).
 
-This workflow uses Node.js directly—no Docker is required.
+This workflow uses Fly's Docker build system.
 
 ## 🎯 Game Commands
 
@@ -104,7 +102,7 @@ This workflow uses Node.js directly—no Docker is required.
 - **Backend**: Node.js + Express + WebSocket
 - **Chess Engine**: chess.js with custom AI evaluation
 - **UI**: react-chessboard with custom theming
-- **Deployment**: Railway with Nixpacks
+- **Deployment**: Fly.io using Docker
 - **Telegram**: Telegraf bot framework
 
 ## 🎨 Theme Colors

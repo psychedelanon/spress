@@ -9,14 +9,14 @@
     "name": "Spress",
     "subtitle": "Social strategy game",
     "description": "Play strategy games, connect with friends, and earn rewards.",
-    "iconUrl": "https://your-app.up.railway.app/icon.png",
-    "homeUrl": "https://your-app.up.railway.app",
-    "splashImageUrl": "https://your-app.up.railway.app/splash.png",
+    "iconUrl": "https://your-app.fly.dev/icon.png",
+    "homeUrl": "https://your-app.fly.dev",
+    "splashImageUrl": "https://your-app.fly.dev/splash.png",
     "splashBackgroundColor": "#000000",
-    "heroImageUrl": "https://your-app.up.railway.app/hero.png",
+    "heroImageUrl": "https://your-app.fly.dev/hero.png",
     "tagline": "Play. Connect. Compete.",
     "screenshotUrls": [
-      "https://your-app.up.railway.app/screenshot1.png"
+      "https://your-app.fly.dev/screenshot1.png"
     ],
     "primaryCategory": "games",
     "tags": ["multiplayer", "strategy", "social", "onchain"]

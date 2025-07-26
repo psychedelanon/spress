@@ -7,7 +7,7 @@ A full-featured chess mini-app for Telegram with real-time gameplay, AI opponent
 ### 🎮 Game Modes
 - **Solo vs AI**: Play against an intelligent AI opponent with tactical evaluation
 - **PvP**: Challenge friends via Telegram with real-time synchronization
-- **Real-time Updates**: WebSocket-powered instant move synchronization
+- **Real-time Updates**: Powered by Pusher channels for instant move synchronization
 
 ### 🎨 Enhanced UI
 - **Blue & Yellow Theme**: Distinctive board colors (#0053FF dark squares, #FFD700 light squares)
@@ -99,7 +99,7 @@ This workflow uses Fly's Docker build system.
 ## 🛠 Technical Stack
 
 - **Frontend**: React + TypeScript + Vite
-- **Backend**: Node.js + Express + WebSocket
+- **Backend**: Node.js + Express with Pusher for realtime
 - **Chess Engine**: chess.js with custom AI evaluation
 - **UI**: react-chessboard with custom theming
 - **Deployment**: Fly.io using Docker
@@ -124,6 +124,12 @@ PORT=3000
 WEBAPP_URL=https://yourapp.com/webapp
 METRICS_PORT=9000
 ENABLE_SHARE_HOOK=0
+PUSHER_APP_ID=your_pusher_app_id
+PUSHER_KEY=your_pusher_key
+PUSHER_SECRET=your_pusher_secret
+PUSHER_CLUSTER=your_pusher_cluster
+VITE_PUSHER_KEY=your_pusher_key
+VITE_PUSHER_CLUSTER=your_pusher_cluster
 ```
 
 `PUBLIC_URL` **must** match the public domain of your deployment (for example

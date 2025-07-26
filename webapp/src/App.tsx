@@ -3,6 +3,7 @@ import { Chess } from 'chess.js';
 import ErrorBoundary from './ErrorBoundary';
 import { TelegramBridge } from './TelegramBridge';
 import './App.css';
+import { subscribeToGame } from './pusherClient';
 
 // Lazy load components
 const Board = lazy(() => import('./Board'));
@@ -60,7 +61,6 @@ function App() {
   const spectator = useMemo(() => url.searchParams.get('spectator') === '1', [url]);
   const replayParam = useMemo(() => url.searchParams.get('replay'), [url]);
 
-  const [socket, setSocket] = useState<WebSocket | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -78,11 +78,6 @@ function App() {
     color: (url.searchParams.get('color') ?? 'w') as 'w' | 'b'
   }), [url]);
 
-  // Memoized WebSocket URL
-  const wsUrl = useMemo(() => {
-    const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${wsProtocol}://${location.host}/ws`;
-  }, []);
 
   // Replay keyboard handler
   useEffect(() => {
@@ -115,8 +110,8 @@ function App() {
   }, [replayIndex, replayMoves]);
 
   // Optimized move sender
-  const sendMove = useCallback((move: ClientMove) => {
-    if (moveInFlight.current || !socket) return; // dedupe and null check
+  const sendMove = useCallback(async (move: ClientMove) => {
+    if (moveInFlight.current) return;
     
     // Add move preview
     const pieceSymbol = gameState?.fen ? 
@@ -141,9 +136,21 @@ function App() {
       moveData.captureSquare = move.captureSquare;
     }
     
-    socket.send(JSON.stringify(moveData));
-    moveInFlight.current = true;
-  }, [socket, gameState?.fen]);
+    try {
+      moveInFlight.current = true;
+      await fetch('/api/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session: urlParams.session,
+          color: urlParams.color,
+          ...moveData
+        })
+      });
+    } finally {
+      moveInFlight.current = false;
+    }
+  }, [gameState?.fen, urlParams.session, urlParams.color]);
 
   // Helper to get piece symbol from FEN position
   const getPieceAt = useCallback((fen: string, square: string): string => {
@@ -304,7 +311,7 @@ function App() {
     }
   }, [gameState?.fen, urlParams.color, urlParams.session, extractLastMoveFromUpdate]);
 
-  // Main WebSocket connection effect
+  // Main Pusher subscription effect
   useEffect(() => {
     if (replayParam) {
       try {
@@ -356,51 +363,14 @@ function App() {
       return;
     }
 
-    // Create WebSocket connection
-    const ws = new WebSocket(`${wsUrl}?session=${urlParams.session}&color=${urlParams.color}`);
-    
-    ws.onopen = () => {
-      console.debug('WebSocket connected');
-      setSocket(ws);
-      
-      // Send keepalive pings every 30 seconds
-      const keepAlive = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'ping' }));
-        } else {
-          clearInterval(keepAlive);
-        }
-      }, 30000);
-    };
-
-    ws.addEventListener('message', handleMessage);
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setErrorMessage('Failed to connect to game. Please try again.');
-    };
-
-    ws.onclose = (event) => {
-      console.debug('WebSocket disconnected:', event.code, event.reason);
-      setSocket(null);
-      
-      // Try to reconnect if connection was lost unexpectedly
-      if (event.code !== 1000 && event.code !== 1001) {
-        console.debug('Attempting to reconnect...');
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000);
-      }
-      if (!gameState) {
-        setErrorMessage('Connection lost. Please restart the game from Telegram.');
-      }
-    };
+    const unsubscribe = subscribeToGame(urlParams.session, (data: any) => {
+      handleMessage({ data: JSON.stringify(data) } as MessageEvent);
+    });
 
     return () => {
-      ws.removeEventListener('message', handleMessage);
-      ws.close();
+      unsubscribe();
     };
-  }, [replayParam, urlParams.session, urlParams.color, wsUrl, handleMessage]);
+  }, [replayParam, urlParams.session, urlParams.color, handleMessage]);
 
   // Timeout to surface connection issues instead of showing a blank screen
   useEffect(() => {
@@ -439,7 +409,7 @@ function App() {
   }
 
   // Loading state
-  if (!socket || !gameState) {
+  if (!gameState) {
     return (
       <div className="app-container">
         <h1 className="title">SPRESS Chess</h1>

@@ -8,7 +8,8 @@ import { insertGame, games, deleteGame } from '../store/games';
 import { GameSession as NewGameSession, PlayerInfo } from '../types';
 import { getStats, recordResult, getAllStats, seenChats } from '../store/stats';
 import { t } from '../i18n';
-import { userPrefs, activeSessions } from '../server';
+import { userPrefs } from '../server';
+import { activeSessions } from '../store/sessions';
 import { log as logger } from '../log';
 
 const WEBAPP_URL = process.env.WEBAPP_URL ||

@@ -82,6 +82,25 @@ Deploy the bot to [Fly.io](https://fly.io/) using the included `fly.toml`.
 
 This workflow uses Fly's Docker build system.
 
+### Deployment (Vercel)
+The project can also be hosted on [Vercel](https://vercel.com/).
+
+1. Install the [Vercel CLI](https://vercel.com/docs/cli) and run `vercel link` in this folder.
+2. Configure the following environment variables in the Vercel dashboard or via `vercel env add`:
+   - `TELE_TOKEN`
+   - `PUBLIC_URL` (should match your Vercel URL)
+   - `PUSHER_APP_ID`
+   - `PUSHER_KEY`
+   - `PUSHER_SECRET`
+   - `PUSHER_CLUSTER`
+   - `VITE_PUSHER_KEY`
+   - `VITE_PUSHER_CLUSTER`
+3. Deploy with:
+   ```bash
+   vercel --prod
+   ```
+4. Your mini app will be available at the Vercel domain shown after deployment.
+
 ## 🎯 Game Commands
 
 ### Telegram Bot Commands

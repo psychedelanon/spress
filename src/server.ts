@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import http from 'http';
 import path from 'node:path';
 import fs from 'node:fs';
-import { initWS, setBotInstance } from './wsHub';
+import { sendGameUpdate, notifyGameStart } from './pusherHub';
 import { registerUser } from './store/db';
 import { games, loadGames, purgeFinished } from './store/games';
 import { loadStats, saveStatsPeriodically, saveStats } from './store/stats';
@@ -26,7 +26,7 @@ const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 export const userPrefs: Record<number, { lang: string }> = {};
 // Map of telegramId -> sessionId for quick lookup of active games
-export const activeSessions = new Map<number, string>();
+import { activeSessions } from './store/sessions';
 
 const cmds = new Counter({ name: 'commands_total', help: 'total cmds' });
 
@@ -50,13 +50,7 @@ if (!process.env.TELE_TOKEN) {
   logger.info('✅ Bot instance created');
 }
 
-// Initialize WebSocket server for real-time board updates
-initWS(server);
-
-// Connect bot instance to WebSocket hub for turn notifications
-if (bot) {
-  setBotInstance(bot);
-}
+// Pusher notifications are handled via pusherHub
 
 // Middleware
 app.use(express.json());

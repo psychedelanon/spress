@@ -1,14 +1,19 @@
 {
   "version": 2,
-  "rewrites": [ { "source": "/(.*)", "destination": "/api/index.ts" } ],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" }
+  ],
   "env": {
     "TELE_TOKEN": "",
     "PUBLIC_URL": "",
     "PUSHER_APP_ID": "",
     "PUSHER_KEY": "",
     "PUSHER_SECRET": "",
-    "PUSHER_CLUSTER": ""
+    "PUSHER_CLUSTER": "",
+    "VITE_PUSHER_KEY": "",
+    "VITE_PUSHER_CLUSTER": ""
   },
-  "buildCommand": "npm install && npm run build:webapp",
+  "buildCommand": "npm install && npm install --prefix webapp && npm run build:webapp",
+  "installCommand": "npm install && npm install --prefix webapp",
   "outputDirectory": "webapp/dist"
 }

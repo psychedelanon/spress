@@ -83,7 +83,7 @@ Deploy the bot to [Fly.io](https://fly.io/) using the included `fly.toml`.
 This workflow uses Fly's Docker build system.
 
 ### Deployment (Vercel)
-The project can also be hosted on [Vercel](https://vercel.com/). Vercel now auto-detects the Node API functions and the `webapp` build output, so no `vercel.json` file is required.
+The project can also be hosted on [Vercel](https://vercel.com/). The repository includes a `vercel.json` file which builds the client in `webapp` and serves the static output from `webapp/dist` (defined in `vercel.json`). Only `/api/` requests are routed to the serverless functions.
 
 1. Install the [Vercel CLI](https://vercel.com/docs/cli) and run `vercel link` in this folder.
 2. Configure the following environment variables in the Vercel dashboard or via `vercel env add`:

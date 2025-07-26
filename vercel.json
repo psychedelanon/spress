@@ -1,0 +1,6 @@
+{
+  "version": 2,
+  "buildCommand": "npm --prefix webapp install && npm run --prefix webapp build",
+  "outputDirectory": "webapp/dist",
+  "rewrites": [ { "source": "/api/(.*)", "destination": "/api/$1" } ]
+}

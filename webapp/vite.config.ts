@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
-const basePath = process.env.VERCEL ? '/' : '/webapp/';
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -14,7 +13,7 @@ export default defineConfig({
       brotliSize: true,
     }),
   ],
-  base: basePath,
+  base: '/',
   build: { 
     outDir: 'dist',
     target: 'es2020',

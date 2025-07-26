@@ -13,7 +13,7 @@
     "dev": "concurrently -k \"npm run dev:bot\" \"npm run dev:web\"",
     "build:bot": "tsc",
     "build:webapp": "cd webapp && npm run build",
-    "build": "npm run build:bot && npm run build:webapp",
+    "build": "npm --prefix webapp install && npm run --prefix webapp build",
     "clean:webapp": "rm -rf webapp/node_modules webapp/dist webapp/package-lock.json",
     "start": "node start.js",
     "test": "jest",
